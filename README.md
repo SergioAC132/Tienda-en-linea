@@ -1,4 +1,4 @@
-# Tintin Luxury — Tienda en Lineaez
+# Tintin Luxury — Tienda en Linea
 
 ---
 
