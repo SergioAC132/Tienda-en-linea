@@ -1,7 +1,8 @@
 
 const express = require('express');
 const dotenv = require('dotenv');
-const pool = require('./config/db');
+const cors = require('cors');
+const path = require('path');
 const authRoutes = require('./routes/auth.routes')
 
 dotenv.config();
@@ -10,10 +11,20 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ------ Middlewares ------
+app.use(cors());
 app.use(express.json());
 
-// ------ Rutas ------
+// ------ Rutas API ------
 app.use('/api/auth', authRoutes);
+
+// ------ Frontend estático ------
+const frontendPath = path.join(__dirname, '..', 'frontend');
+app.use(express.static(frontendPath));
+
+// Rutas del frontend
+app.get('/',          (_req, res) => res.redirect('/login'));
+app.get('/login',     (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'login.html')));
+app.get('/registro',  (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'registro.html')));
 
 // ------ Arranque ------
 app.listen(PORT, () => {

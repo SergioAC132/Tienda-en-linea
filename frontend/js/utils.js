@@ -37,20 +37,18 @@ function getPaymentStatusColor(estado) {
 }
 
 // ─── Navegación entre páginas ─────────────────────────────────
-// Detecta si estamos dentro de /views/ para ajustar rutas relativas
-const _inViews = window.location.pathname.replace(/\\/g, '/').includes('/views/');
-
 const Nav = {
-  login:             _inViews ? '../index.html'              : 'index.html',
-  catalogo:          _inViews ? 'catalogo.html'              : 'views/catalogo.html',
-  carrito:           _inViews ? 'carrito.html'               : 'views/carrito.html',
-  pedidos:           _inViews ? 'pedidos.html'               : 'views/pedidos.html',
-  dashboard:         _inViews ? 'dashboard.html'             : 'views/dashboard.html',
-  admin:             _inViews ? 'admin.html'                 : 'views/admin.html',
-  catalogoVendedor:  _inViews ? 'catalogo-vendedor.html'     : 'views/catalogo-vendedor.html',
-  producto:  (id)  => _inViews ? `detalle.html?id=${id}`        : `views/detalle.html?id=${id}`,
-  pago:      (id)  => _inViews ? `pago.html?pedidoId=${id}`     : `views/pago.html?pedidoId=${id}`,
-  go(url)   { window.location.href = url; }
+  login:            '/login',
+  registro:         '/registro',
+  catalogo:         '/views/catalogo.html',
+  carrito:          '/views/carrito.html',
+  pedidos:          '/views/pedidos.html',
+  dashboard:        '/views/dashboard.html',
+  admin:            '/views/admin.html',
+  catalogoVendedor: '/views/catalogo-vendedor.html',
+  producto: (id)  => `/views/detalle.html?id=${id}`,
+  pago:     (id)  => `/views/pago.html?pedidoId=${id}`,
+  go(url)  { window.location.href = url; }
 };
 
 // ─── Parámetros URL ───────────────────────────────────────────
