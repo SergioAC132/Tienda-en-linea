@@ -105,16 +105,17 @@ tienda-en-linea/
 │   ├── middlewares/     # Autenticación JWT, validaciones, roles
 │   ├── models/          # Consultas SQL por entidad
 │   ├── routes/          # Definición de endpoints REST
-│   └── database/
-│       ├── schema.sql   # Script de creación de tablas (PostgreSQL)
-│       └── uploads/     # Imágenes subidas localmente (ignorada por Git)
+├── database/
+│   ├── schema.sql   # Script de creación de tablas (PostgreSQL)
+│   └── uploads/     # Imágenes subidas localmente (ignorada por Git)
 ├── frontend/
 │   ├── assets/
-│   │   ├── css/         # Estilos globales
-│   │   └── js/          # Scripts del cliente
+│   ├── css/         # Estilos globales
+│   ├── js/          # Scripts del cliente
 │   └── views/           # Vistas HTML por módulo
 ├── .env.example         # Variables de entorno (plantilla — sí se sube a Git)
 ├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
