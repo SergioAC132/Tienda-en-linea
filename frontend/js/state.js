@@ -101,14 +101,24 @@ const AppState = (function () {
     get pedidos()      { return s.pedidos; },
 
     // ─── Auth ────────────────────────────────────────────────
-    login(rol) {
-      const u = s.usuarios.find(u => u.rol === rol && u.estado === 'activo');
-      if (u) { s.currentUser = u; save(s); return true; }
-      return false;
+    setCurrentUser(usuario, token) {
+      s.currentUser = {
+        id:     usuario.id_usuario,
+        nombre: usuario.nombre,
+        email:  usuario.email,
+        rol:    usuario.rol,
+        estado: usuario.activo ? 'activo' : 'inactivo'
+      };
+      if (token) localStorage.setItem('tintin_token', token);
+      save(s);
+    },
+    getToken() {
+      return localStorage.getItem('tintin_token');
     },
     logout() {
       s.currentUser = null;
       s.carrito = [];
+      localStorage.removeItem('tintin_token');
       save(s);
     },
 

@@ -58,9 +58,9 @@ const login = async (req, res) => {
 /* POST /api/auth/register
    Body: { nombre, email, password, telefono }*/
 const register = async (req, res) => {
-  const { nombre, email, password, telefono } = req.body;
+  const { nombre, email, password, confirmPassword, telefono } = req.body;
  
-  if (!nombre || !email || !password || !telefono) {
+  if (!nombre || !email || !password || !confirmPassword || !telefono) {
     return res.status(400).json({ message: 'Este campo es requerido.' });
   }
  
@@ -73,6 +73,12 @@ const register = async (req, res) => {
   if (password.length < 8) {
     return res.status(400).json({
       message: 'La contraseña debe tener al menos 8 caracteres.',
+    });
+  }
+
+  if (confirmPassword != password) {
+    return res.status(400).json({
+      message: 'Las contraseñas no coinciden.',
     });
   }
  
