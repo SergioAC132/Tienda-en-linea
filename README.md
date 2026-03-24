@@ -136,6 +136,8 @@ tienda-en-linea/
 
 ## Convenciones de Git
 
+Antes de trabajar o hacer push. Se debe realizar un pull a origin main. Esto con la finalidad de tener las últimas actualizaciones, así como evitar que existan conflictos entre la última versión aprobada y el push a realizar. 
+
 ### Ramas
 
 | Rama | Uso |
