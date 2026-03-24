@@ -1,6 +1,3 @@
-// Conexión a PostgreSQL mediante el driver 'pg' (node-postgres)
-// Compatible con Supabase
- 
 const { Pool } = require('pg');
 require('dotenv').config();
  
