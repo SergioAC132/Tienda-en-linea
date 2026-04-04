@@ -79,7 +79,7 @@ function renderRegistro() {
     </div>
   `;
 
-  // Un solo toggle controla ambos campos de contraseña
+  //Un toggle para cada campo de contraseñas
   document.getElementById('toggle-pwd')?.addEventListener('click', function () {
     const show = document.getElementById('reg-password').type === 'password';
     document.getElementById('reg-password').type  = show ? 'text' : 'password';
