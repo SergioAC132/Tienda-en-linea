@@ -34,11 +34,11 @@ function renderLogin() {
           <div class="form-group">
             <label class="form-label">Contraseña</label>
             <div class="input-wrapper">
-              <input type="${_showPassword ? 'text' : 'password'}" id="login-password"
+              <input type="password" id="login-password"
                 placeholder="Tu contraseña" autocomplete="current-password"
                 style="padding-right:42px;" />
               <button class="input-icon-right" id="toggle-pwd" type="button">
-                ${_showPassword ? Icons.EyeOff(16) : Icons.Eye(16)}
+                ${Icons.Eye(16)}
               </button>
             </div>
           </div>
@@ -58,9 +58,10 @@ function renderLogin() {
     </div>
   `;
 
-  document.getElementById('toggle-pwd')?.addEventListener('click', () => {
-    _showPassword = !_showPassword;
-    renderLogin();
+  document.getElementById('toggle-pwd')?.addEventListener('click', function () {
+    const show = document.getElementById('login-password').type === 'password';
+    document.getElementById('login-password').type  = show ? 'text' : 'password';
+    this.innerHTML = show ? Icons.EyeOff(16) : Icons.Eye(16);
   });
 
   document.getElementById('login-btn')?.addEventListener('click', doLogin);
