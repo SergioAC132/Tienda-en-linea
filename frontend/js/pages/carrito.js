@@ -42,10 +42,18 @@ function renderCarrito() {
   const addressSection = direcciones.length === 0
     ? `<div style="background:rgba(42,42,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;">
         <p style="font-size:13px;color:var(--muted-fg);">No tienes direcciones registradas</p>
+        <button class="btn btn-outline btn-sm" id="btn-nueva-dir-empty" style="margin-top:10px;">
+          ${Icons.Plus(14)} Agregar dirección
+        </button>
        </div>`
-    : `<select id="address-select">
-        ${direcciones.map(d => `<option value="${d.id}">${d.nombre_completo} - ${d.ciudad}, ${d.estado}</option>`).join('')}
-       </select>`;
+    : `<div style="display:flex;gap:8px;align-items:center;">
+        <select id="address-select" style="flex:1;">
+          ${direcciones.map(d => `<option value="${d.id}">${d.calle} ${d.numero_exterior || ''} - ${d.ciudad}, ${d.estado}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" id="btn-nueva-dir-inline" title="Nueva dirección" style="padding:10px 12px;flex-shrink:0;">
+          ${Icons.Plus(16)}
+        </button>
+       </div>`;
 
   const canOrder = direcciones.length > 0;
 
@@ -95,6 +103,18 @@ function renderCarrito() {
     });
   });
 
+  const abrirNuevaDireccion = () => {
+    abrirModalDireccion(null, (nueva) => {
+      AppState.agregarDireccionNormalizada(nueva);
+      renderCarrito();
+      const sel = document.getElementById('address-select');
+      if (sel) sel.value = nueva.id;
+      showToast('Dirección agregada', 'success');
+    });
+  };
+  document.getElementById('btn-nueva-dir-empty')?.addEventListener('click', abrirNuevaDireccion);
+  document.getElementById('btn-nueva-dir-inline')?.addEventListener('click', abrirNuevaDireccion);
+
   const commentsEl = document.getElementById('cart-comments');
   commentsEl?.addEventListener('input', () => {
     document.getElementById('char-count').textContent = commentsEl.value.length;
@@ -109,4 +129,19 @@ function renderCarrito() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', renderCarrito);
+document.addEventListener('DOMContentLoaded', () => {
+  Api.getDirecciones()
+    .then(data => {
+      const normalizadas = data.map(d => ({
+        id: d.id_direccion, usuario_id: d.id_usuario,
+        calle: d.calle, numero_exterior: d.numero_exterior,
+        numero_interior: d.numero_interior || '',
+        colonia: d.colonia, ciudad: d.ciudad, estado: d.estado,
+        codigo_postal: d.codigo_postal, pais: d.pais,
+        referencias: d.referencias || '', es_principal: d.es_principal
+      }));
+      AppState.setDirecciones(normalizadas);
+    })
+    .catch(() => {})
+    .finally(() => renderCarrito());
+});

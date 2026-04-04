@@ -159,6 +159,22 @@ const AppState = (function () {
       const nueva = { ...data, id: `DIR-${Date.now()}` };
       s.direcciones.push(nueva); save(s); return nueva;
     },
+    setDirecciones(arr) {
+      s.direcciones = arr; save(s);
+    },
+    editarDireccion(id, cambios) {
+      if (cambios.es_principal) {
+        s.direcciones.forEach(d => { d.es_principal = false; });
+      }
+      const i = s.direcciones.findIndex(d => String(d.id) === String(id));
+      if (i !== -1) { s.direcciones[i] = { ...s.direcciones[i], ...cambios }; save(s); }
+    },
+    agregarDireccionNormalizada(data) {
+      if (data.es_principal) {
+        s.direcciones.forEach(d => { d.es_principal = false; });
+      }
+      s.direcciones.push(data); save(s);
+    },
 
     // ─── Pedidos ─────────────────────────────────────────────
     crearPedido(direccionId, comentarios) {

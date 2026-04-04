@@ -39,11 +39,17 @@ function renderHeader() {
         <nav class="header-nav">
           ${navLinks}
           <div class="header-user">
-            <div class="user-info">
-              ${Icons.User(20)}
-              <span>${user.nombre}</span>
+            <div class="user-menu" id="user-menu">
+              <button class="user-menu-trigger" id="user-menu-trigger">
+                ${Icons.User(20)}
+                <span>${user.nombre}</span>
+                ${Icons.ArrowDown(14)}
+              </button>
+              <div class="user-dropdown" id="user-dropdown">
+                ${user.rol === 'CLIENTE' ? `<a href="${Nav.direcciones}">${Icons.MapPin(16)} Mis Direcciones</a>` : ''}
+                <button id="logout-btn">${Icons.LogOut(16)} Cerrar sesión</button>
+              </div>
             </div>
-            <button class="logout-btn" id="logout-btn">${Icons.LogOut(20)}</button>
           </div>
         </nav>
       </div>
@@ -54,4 +60,14 @@ function renderHeader() {
     AppState.logout();
     Nav.go(Nav.login);
   });
+
+  const trigger  = document.getElementById('user-menu-trigger');
+  const dropdown = document.getElementById('user-dropdown');
+
+  trigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown?.classList.toggle('open');
+  });
+
+  document.addEventListener('click', () => dropdown?.classList.remove('open'), { once: false });
 }
