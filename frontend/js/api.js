@@ -22,5 +22,39 @@ const Api = {
     const data = await res.json();
     if (!res.ok) throw { status: res.status, message: data.message || 'Error al registrarse' };
     return data; // { usuario }
+  },
+
+  async getDirecciones() {
+    const token = AppState.getToken();
+    const res = await fetch(`${API_URL}/direcciones`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) throw { status: res.status, message: data.message || 'Error al obtener direcciones' };
+    return data;
+  },
+
+  async crearDireccion(direccionData) {
+    const token = AppState.getToken();
+    const res = await fetch(`${API_URL}/direcciones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(direccionData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw { status: res.status, message: data.errores ? data.errores.join(' ') : (data.message || 'Error al crear dirección') };
+    return data;
+  },
+
+  async modificarDireccion(idDireccion, direccionData) {
+    const token = AppState.getToken();
+    const res = await fetch(`${API_URL}/direcciones/${idDireccion}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(direccionData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw { status: res.status, message: data.errores ? data.errores.join(' ') : (data.message || 'Error al actualizar dirección') };
+    return data;
   }
 };
