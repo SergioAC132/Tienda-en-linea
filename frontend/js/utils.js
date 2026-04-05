@@ -43,6 +43,7 @@ const Nav = {
   catalogo:         '/views/catalogo.html',
   carrito:          '/views/carrito.html',
   pedidos:          '/views/pedidos.html',
+  direcciones:      '/views/direcciones.html',
   dashboard:        '/views/dashboard.html',
   admin:            '/views/admin.html',
   catalogoVendedor: '/views/catalogo-vendedor.html',

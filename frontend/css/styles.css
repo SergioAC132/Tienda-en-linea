@@ -123,6 +123,40 @@ table { border-collapse: collapse; width: 100%; }
 .logout-btn { color: var(--muted-fg); transition: color 0.2s; }
 .logout-btn:hover { color: var(--primary); }
 
+/* ===== USER MENU DROPDOWN ===== */
+.user-menu { position: relative; }
+.user-menu-trigger {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--fg); cursor: pointer;
+  background: none; border: none;
+  font-family: var(--font-sans); font-size: 14px;
+  transition: color 0.2s;
+}
+.user-menu-trigger:hover { color: var(--primary); }
+.user-menu-trigger svg { flex-shrink: 0; }
+.user-dropdown {
+  display: none;
+  position: absolute; right: 0; top: calc(100% + 10px);
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; min-width: 190px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  overflow: hidden; z-index: 200;
+}
+.user-dropdown.open { display: block; }
+.user-dropdown a,
+.user-dropdown button {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 11px 16px;
+  text-align: left; font-family: var(--font-sans);
+  font-size: 13px; color: var(--fg);
+  background: none; border: none; cursor: pointer;
+  transition: background 0.15s;
+}
+.user-dropdown a:hover,
+.user-dropdown button:hover { background: var(--secondary); color: var(--primary); }
+.user-dropdown a svg,
+.user-dropdown button svg { color: var(--muted-fg); flex-shrink: 0; }
+
 /* ===== MAIN CONTENT ===== */
 #app-root { padding-bottom: 60px; }
 
@@ -576,6 +610,10 @@ input::-webkit-contacts-auto-fill-button { display: none !important; }
 .order-section-title svg { color: var(--primary); }
 .address-lines p { font-size: 13px; color: var(--muted-fg); margin-bottom: 2px; }
 .order-comments { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+
+/* ===== DIRECCIONES ===== */
+.direcciones-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+@media (min-width: 768px) { .direcciones-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ===== DASHBOARD ===== */
 .dashboard-layout { padding-top: 48px; }
