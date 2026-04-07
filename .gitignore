@@ -140,6 +140,9 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 #Ruta uploads
+database/cleanup_pedidos.sql
+database/seed_pedidos.sql
+database/seed_usuarios.sql
 database/uploads/*
 !database/uploads/.gitkeep
 

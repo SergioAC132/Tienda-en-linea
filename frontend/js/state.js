@@ -177,13 +177,47 @@ const AppState = (function () {
     },
 
     // ─── Pedidos ─────────────────────────────────────────────
-    crearPedido(direccionId, comentarios) {
+
+    /**
+     * Reemplaza la lista de pedidos en el estado con los datos que
+     * devuelve la API. Se llama desde la página de pedidos después
+     * de un GET /api/pedidos exitoso.
+     * Normaliza el campo id_usuario (nombre de la BD) al campo
+     * usuario_id que usa el resto del estado local, para mantener
+     * compatibilidad con el flujo del carrito y pago.
+     *
+     * @param {Array} arr - Lista de pedidos devuelta por la API
+     */
+    setPedidos(arr) {
+      s.pedidos = arr.map(p => ({
+        ...p,
+        // La BD usa id_pedido, el estado local usa id
+        id: p.id_pedido ?? p.id,
+        // La BD usa id_usuario, el estado local usa usuario_id
+        usuario_id: p.id_usuario ?? p.usuario_id,
+      }));
+      save(s);
+    },
+
+    /**
+     * Crea un pedido en el estado local después de que la API lo guardó en la BD.
+     * Guarda el id_pedido de la BD junto al ID local para que pago.js pueda
+     * llamar al endpoint PATCH /api/pedidos/:id/pagar y actualizar el estado real.
+     * También conserva items y dirección para que pago.js los pueda mostrar.
+     *
+     * @param {string} direccionId  - ID local de la dirección seleccionada
+     * @param {string} comentarios  - Comentarios del cliente (puede ser vacío)
+     * @param {number} idPedidoDB   - id_pedido devuelto por la API al crear el pedido
+     * @returns {Object} El pedido local recién creado
+     */
+    crearPedido(direccionId, comentarios, idPedidoDB) {
       const dir = s.direcciones.find(d => d.id === direccionId);
       if (!dir || !s.currentUser) throw new Error('Error al crear pedido');
       const items = s.carrito.map(i => ({ productoId: i.productoId, nombre: i.nombre, imagenUrl: i.imagenUrl, talla: i.talla, cantidad: i.cantidad, subtotal: i.precio_base * i.cantidad }));
       const total = items.reduce((n, i) => n + i.subtotal, 0);
       const id = `PED-${String(s.pedidos.length + 1).padStart(3, '0')}`;
-      const pedido = { id, usuario_id: s.currentUser.id, direccion: dir, items, total, estado: 'pendiente', comentarios_cliente: comentarios || '', fecha_creacion: new Date().toISOString() };
+      // id_pedido es el ID real en la BD — se usa en pago.js para llamar a la API
+      const pedido = { id, id_pedido: idPedidoDB || null, usuario_id: s.currentUser.id, direccion: dir, items, total, estado: 'pendiente', comentarios_cliente: comentarios || '', fecha_creacion: new Date().toISOString() };
       s.pedidos.push(pedido);
       this.limpiarCarrito();
       save(s);
@@ -202,9 +236,19 @@ const AppState = (function () {
       save(s);
     },
 
+    /**
+     * Devuelve los pedidos del cliente autenticado.
+     * Cuando los pedidos vienen de la API ya vienen filtrados por
+     * el backend, por lo que setPedidos los habrá normalizado.
+     * Cuando vienen del estado local (flujo carrito/pago) usan
+     * usuario_id directamente.
+     */
     getMisPedidos() {
       if (!s.currentUser) return [];
-      return s.pedidos.filter(p => p.usuario_id === s.currentUser.id);
+      const id = String(s.currentUser.id);
+      return s.pedidos.filter(p =>
+        String(p.usuario_id) === id || String(p.id_usuario) === id
+      );
     },
 
     // ─── Usuarios ────────────────────────────────────────────
