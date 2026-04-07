@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const authRoutes = require('./routes/auth.routes');
 const direccionRoutes = require('./routes/direccion.routes');
+const pedidoRoutes = require('./routes/pedido.routes');
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(express.json());
 // ------ Rutas API ------
 app.use('/api/auth', authRoutes);
 app.use('/api/direcciones', direccionRoutes);
+app.use('/api/pedidos', pedidoRoutes);
 
 // ------ Frontend estático ------
 const frontendPath = path.join(__dirname, '..', 'frontend');
