@@ -413,25 +413,26 @@ function abrirCambioEstado(idPedido, estadoActual) {
   // Crear overlay y modal
   const overlay = document.createElement('div');
   overlay.id = 'modal-estado-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  overlay.className = 'modal-overlay';
 
   overlay.innerHTML = `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:420px;margin:0 16px;">
-      <h3 style="font-family:var(--font-serif);font-size:20px;margin-bottom:4px;">Cambiar estado</h3>
-      <p style="font-size:13px;color:var(--muted-fg);margin-bottom:20px;">Pedido #${idPedido} · Estado actual: ${getStatusBadge(estadoActual)}</p>
-
-      <p style="font-size:13px;font-weight:500;margin-bottom:12px;">Selecciona el nuevo estado:</p>
-      <div id="estado-opciones">${botonesHtml}</div>
-
-      ${transiciones.length > 0 ? `
-        <div style="margin-top:16px;">
-          <label class="form-label" style="font-size:13px;">Comentario para el cliente (opcional)</label>
-          <textarea id="comentario-vendedor" rows="2" maxlength="100"
-                    placeholder="Ej: Tu pago fue recibido y verificado..."
-                    style="margin-top:6px;"></textarea>
-        </div>` : ''}
-
-      <div style="display:flex;gap:10px;margin-top:20px;">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h3>Cambiar estado</h3>
+      </div>
+      <div class="modal-body">
+        <p class="form-hint" style="margin-bottom:20px;">Pedido #${idPedido} · Estado actual: ${getStatusBadge(estadoActual)}</p>
+        <p style="font-size:13px;font-weight:500;margin-bottom:12px;">Selecciona el nuevo estado:</p>
+        <div id="estado-opciones">${botonesHtml}</div>
+        ${transiciones.length > 0 ? `
+          <div style="margin-top:16px;">
+            <label class="form-label">Comentario para el cliente (opcional)</label>
+            <textarea id="comentario-vendedor" rows="2" maxlength="100"
+                      placeholder="Ej: Tu pago fue recibido y verificado..."
+                      style="margin-top:6px;"></textarea>
+          </div>` : ''}
+      </div>
+      <div class="modal-footer" style="padding:0 24px 24px;">
         <button class="btn btn-outline" id="btn-cancelar-estado" style="flex:1;">Cancelar</button>
         ${transiciones.length > 0 ? `
           <button class="btn btn-primary" id="btn-confirmar-estado" style="flex:1;" disabled>
@@ -510,22 +511,24 @@ function abrirCambioEstado(idPedido, estadoActual) {
  */
 function abrirModalComentario(idPedido, comentarioActual) {
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  overlay.className = 'modal-overlay';
 
   overlay.innerHTML = `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:420px;margin:0 16px;">
-      <h3 style="font-family:var(--font-serif);font-size:20px;margin-bottom:4px;">Nota interna</h3>
-      <p style="font-size:13px;color:var(--muted-fg);margin-bottom:20px;">Pedido #${idPedido} · Visible para el cliente en sus pedidos</p>
-
-      <label class="form-label" style="font-size:13px;">Comentario del vendedor</label>
-      <textarea id="input-comentario-vendedor" rows="3" maxlength="100"
-                placeholder="Ej: Pago confirmado, enviamos el martes..."
-                style="margin-top:6px;">${comentarioActual || ''}</textarea>
-      <p class="form-hint" style="text-align:right;margin-top:4px;">
-        <span id="contador-comentario">${(comentarioActual || '').length}</span>/100
-      </p>
-
-      <div style="display:flex;gap:10px;margin-top:16px;">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h3>Nota interna</h3>
+      </div>
+      <div class="modal-body">
+        <p class="form-hint" style="margin-bottom:20px;">Pedido #${idPedido} · Visible para el cliente en sus pedidos</p>
+        <label class="form-label">Comentario del vendedor</label>
+        <textarea id="input-comentario-vendedor" rows="3" maxlength="100"
+                  placeholder="Ej: Pago confirmado, enviamos el martes..."
+                  style="margin-top:6px;">${comentarioActual || ''}</textarea>
+        <p class="form-hint" style="text-align:right;margin-top:4px;">
+          <span id="contador-comentario">${(comentarioActual || '').length}</span>/100
+        </p>
+      </div>
+      <div class="modal-footer" style="padding:0 24px 24px;">
         <button class="btn btn-outline" id="btn-cancelar-comentario" style="flex:1;">Cancelar</button>
         <button class="btn btn-primary" id="btn-guardar-comentario" style="flex:1;">Guardar nota</button>
       </div>

@@ -85,16 +85,16 @@ function renderTarjetaPedido(pedido) {
 
   // Comentario del vendedor (solo se muestra si existe)
   const comentVendedorHtml = pedido.comentarios_vendedor ? `
-    <div class="order-comments" style="margin-top:12px;">
-      <h4 style="font-weight:500;margin-bottom:4px;font-size:13px;">Nota del vendedor</h4>
-      <p style="font-size:13px;color:var(--muted-fg);">${pedido.comentarios_vendedor}</p>
+    <div class="order-comments">
+      <p class="form-label">Nota del vendedor</p>
+      <p class="form-hint">${pedido.comentarios_vendedor}</p>
     </div>` : '';
 
   // Comentario del cliente (solo se muestra si existe)
   const comentClienteHtml = pedido.comentarios_cliente ? `
-    <div class="order-comments" style="margin-top:12px;">
-      <h4 style="font-weight:500;margin-bottom:4px;font-size:13px;">Tu comentario</h4>
-      <p style="font-size:13px;color:var(--muted-fg);">${pedido.comentarios_cliente}</p>
+    <div class="order-comments">
+      <p class="form-label">Tu comentario</p>
+      <p class="form-hint">${pedido.comentarios_cliente}</p>
     </div>` : '';
 
   // Botones de acción: solo disponibles cuando el pedido está en 'pendiente'.
@@ -127,7 +127,7 @@ function renderTarjetaPedido(pedido) {
           </div>
           <div class="order-meta-item">
             <p>Total</p>
-            <p style="color:var(--primary);">$${formatCurrency(pedido.total)} MXN</p>
+            <p class="total-amount">$${formatCurrency(pedido.total)} MXN</p>
           </div>
         </div>
         ${getStatusBadge(pedido.estado)}
