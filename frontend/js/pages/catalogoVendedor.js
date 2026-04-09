@@ -1,26 +1,58 @@
 // ===== VENDOR CATALOG PAGE =====
-const TALLAS_PRESET = ['XS','S','M','L','XL','Única','35','36','37','38','39','40'];
 
-let _modal = null;        // null | { mode:'new'|'edit', productoId:string|null }
-let _form  = { nombre:'', descripcion:'', precio_base:'', tallas:'', disponible:true };
-let _imgs  = [];          // [{ url, file? }]
-let _tallasSelected = [];
+let _modal         = null;   // null | { mode:'new'|'edit', productoId:string|null }
+let _form          = { nombre:'', descripcion:'', precio_base:'', disponible:true };
+let _imgs          = [];     // [{ id_imagen?, url, orden, file? }]
+let _tallasSelected = [];    // [id_talla, ...]
 let _confirmDelete = null;
+let _originalImgIds = [];    // id_imagen values presentes al abrir edit
 
+// Datos cargados desde la API
+let _productos = [];
+let _tallas    = [];         // [{ id_talla, nombre }]
+
+// Estado modal de gestión de tallas
+let _tallasModal      = false;
+let _editingTallaId   = null;   // id_talla en edición inline, o null
+let _newTallaNombre   = '';
+let _newTallaEsNinio  = false;
+let _newTallaDesc     = '';
+let _editTallaNombre  = '';
+let _editTallaEsNinio = false;
+let _editTallaDesc    = '';
+
+// ─── Carga inicial ────────────────────────────────────────────
+async function loadCatalogoVendedor() {
+  if (!requireAuth(['VENDEDOR','ADMIN'])) return;
+  renderHeader();
+  const root = document.getElementById('app-root');
+  root.innerHTML = `<div style="text-align:center;padding:48px;color:var(--muted-fg);">Cargando...</div>`;
+  try {
+    [_productos, _tallas] = await Promise.all([
+      Api.getAllProductosAdmin(),
+      Api.getTallas()
+    ]);
+  } catch (e) {
+    showToast('Error al cargar datos', 'error');
+    _productos = []; _tallas = [];
+  }
+  renderCatalogoVendedor();
+}
+
+// ─── Render principal ─────────────────────────────────────────
 function renderCatalogoVendedor() {
   if (!requireAuth(['VENDEDOR','ADMIN'])) return;
   renderHeader();
 
   const root = document.getElementById('app-root');
-  const productos = AppState.productos;
 
-  const grid = productos.length === 0
+  const grid = _productos.length === 0
     ? `<div class="empty-state" style="min-height:40vh;">
         ${Icons.ImagePlus(48)}
         <p style="color:var(--muted-fg);">No hay productos. ¡Agrega el primero!</p>
         <button class="btn btn-ghost" id="add-first">+ Agregar producto</button>
        </div>`
-    : `<div class="vendor-grid">${productos.map(vendorCard).join('')}</div>`;
+    : `<div class="vendor-grid">${_productos.map(vendorCard).join('')}</div>`;
 
   root.innerHTML = `
     <div class="vendor-catalog-layout">
@@ -28,39 +60,55 @@ function renderCatalogoVendedor() {
         <div>
           <h2 class="page-title">Catálogo de Productos</h2>
           <p class="vendor-header-sub">
-            ${productos.length} producto${productos.length!==1?'s':''} · ${productos.filter(p=>p.disponible).length} publicados
+            ${_productos.length} producto${_productos.length!==1?'s':''} · ${_productos.filter(p=>p.disponible).length} publicados
           </p>
         </div>
-        <button class="btn btn-primary" id="add-btn">${Icons.Plus(16)} Agregar producto</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="tallas-btn">${Icons.Pencil(16)} Gestionar tallas</button>
+          <button class="btn btn-primary" id="add-btn">${Icons.Plus(16)} Agregar producto</button>
+        </div>
       </div>
       ${grid}
     </div>
     ${_modal ? productModal() : ''}
     ${_confirmDelete ? deleteModal() : ''}
+    ${_tallasModal ? tallasManagerModal() : ''}
   `;
 
   document.getElementById('add-btn')?.addEventListener('click', openNew);
   document.getElementById('add-first')?.addEventListener('click', openNew);
+  document.getElementById('tallas-btn')?.addEventListener('click', () => {
+    _tallasModal = true; _editingTallaId = null; _newTallaNombre = ''; _editTallaNombre = '';
+    renderCatalogoVendedor();
+  });
 
   root.querySelectorAll('[data-action]').forEach(el => {
     const { action, pid } = el.dataset;
     if (action === 'edit')   el.addEventListener('click', () => openEdit(pid));
     if (action === 'delete') el.addEventListener('click', () => { _confirmDelete = pid; renderCatalogoVendedor(); });
-    if (action === 'toggle') el.addEventListener('click', () => {
-      const p = AppState.getProducto(pid);
+    if (action === 'toggle') el.addEventListener('click', async () => {
+      const p = _productos.find(x => x.id === pid);
       if (!p) return;
-      AppState.editarProducto(pid, { disponible: !p.disponible });
-      showToast(p.disponible ? 'Producto ocultado' : 'Producto publicado');
-      renderCatalogoVendedor();
+      el.disabled = true;
+      try {
+        await Api.updateProducto(pid, { disponible: !p.disponible });
+        showToast(p.disponible ? 'Producto ocultado' : 'Producto publicado');
+        await loadCatalogoVendedor();
+      } catch (err) {
+        showToast(err.message || 'Error al actualizar el producto', 'error');
+        el.disabled = false;
+      }
     });
   });
 
   if (_modal)         initModalEvents();
   if (_confirmDelete) initDeleteEvents();
+  if (_tallasModal)   initTallasManagerEvents();
 }
 
+// ─── Tarjeta de producto ──────────────────────────────────────
 function vendorCard(p) {
-  const img = [...p.imagenes].sort((a,b)=>a.orden-b.orden)[0];
+  const img = p.imagenes.length > 0 ? [...p.imagenes].sort((a,b)=>a.orden-b.orden)[0] : null;
   return `
     <div class="vendor-product-card">
       <div class="vendor-product-img">
@@ -78,32 +126,47 @@ function vendorCard(p) {
             ${p.disponible ? `<span style="color:var(--green);">${Icons.ToggleRight(16)}</span>` : Icons.ToggleLeft(16)}
             ${p.disponible?'Ocultar':'Publicar'}
           </button>
-          <button class="action-btn" data-action="edit" data-pid="${p.id}" title="Editar">${Icons.Pencil(16)}</button>
+          <button class="action-btn" data-action="edit"   data-pid="${p.id}" title="Editar">${Icons.Pencil(16)}</button>
           <button class="action-btn" data-action="delete" data-pid="${p.id}" title="Eliminar">${Icons.Trash2(16)}</button>
         </div>
       </div>
     </div>`;
 }
 
+// ─── Abrir modal nuevo ────────────────────────────────────────
 function openNew() {
   _modal = { mode:'new', productoId:null };
-  _form = { nombre:'', descripcion:'', precio_base:'', tallas:'', disponible:true };
-  _imgs = []; _tallasSelected = [];
+  _form  = { nombre:'', descripcion:'', precio_base:'', disponible:true };
+  _imgs  = []; _tallasSelected = []; _originalImgIds = [];
   renderCatalogoVendedor();
 }
 
-function openEdit(id) {
-  const p = AppState.getProducto(id);
-  if (!p) return;
+// ─── Abrir modal edición ──────────────────────────────────────
+async function openEdit(id) {
+  const basic = _productos.find(x => x.id === id);
+  if (!basic) return;
+
   _modal = { mode:'edit', productoId:id };
-  _form = { nombre:p.nombre, descripcion:p.descripcion, precio_base:String(p.precio_base), tallas:'', disponible:p.disponible };
-  _imgs = [...p.imagenes].sort((a,b)=>a.orden-b.orden).map(i=>({ url:i.url }));
-  _tallasSelected = p.tallas.filter(t=>t.disponible).map(t=>t.talla);
+  _form  = { nombre:basic.nombre, descripcion:basic.descripcion, precio_base:String(basic.precio_base), disponible:basic.disponible };
+  _imgs  = []; _tallasSelected = []; _originalImgIds = [];
+
+  // Obtener imágenes y tallas desde la API de detalle admin
+  try {
+    const full = await Api.getProductoAdminById(id);
+    _imgs            = [...full.imagenes].sort((a,b)=>a.orden-b.orden).map(i=>({ id_imagen:i.id_imagen, url:i.url, orden:i.orden }));
+    _tallasSelected  = full.tallas.map(t => t.id_talla);
+    _originalImgIds  = full.imagenes.map(i => i.id_imagen);
+  } catch(e) {
+    // continúa con datos vacíos; el vendedor puede agregar imágenes/tallas
+  }
+
   renderCatalogoVendedor();
 }
 
+// ─── Modal de producto ────────────────────────────────────────
 function productModal() {
   const isEdit = _modal.mode === 'edit';
+
   const imgsHtml = _imgs.length > 0
     ? `<div class="image-list">${_imgs.map((img,i) => `
         <div class="image-row">
@@ -113,15 +176,18 @@ function productModal() {
             ${img.file ? `<p class="image-row-filename">${img.file.name}</p>` : ''}
           </div>
           <div class="image-order-btns">
-            <button class="image-order-btn" data-move="up"   data-idx="${i}" ${i===0                ?'disabled':''} >${Icons.ArrowUp(14)}</button>
+            <button class="image-order-btn" data-move="up"   data-idx="${i}" ${i===0               ?'disabled':''} >${Icons.ArrowUp(14)}</button>
             <button class="image-order-btn" data-move="down" data-idx="${i}" ${i===_imgs.length-1  ?'disabled':''} >${Icons.ArrowDown(14)}</button>
           </div>
           <button class="image-remove-btn" data-ridx="${i}">${Icons.X(16)}</button>
         </div>`).join('')}</div>`
     : '';
 
-  const tallasHtml = TALLAS_PRESET.map(t => `
-    <button class="size-toggle ${_tallasSelected.includes(t)?'selected':''}" data-talla="${t}">${t}</button>`).join('');
+  const tallasHtml = _tallas.length > 0
+    ? _tallas.map(t => `
+        <button type="button" class="size-toggle ${_tallasSelected.includes(t.id_talla)?'selected':''}" data-talla-id="${t.id_talla}">${t.nombre}</button>`
+      ).join('')
+    : `<p style="font-size:12px;color:var(--muted-fg);">No hay tallas registradas.</p>`;
 
   return `
     <div class="modal-overlay" id="prod-modal">
@@ -157,9 +223,11 @@ function productModal() {
             <p class="form-hint">PNG, JPG, WEBP · Puedes subir varias · Usa las flechas para ordenarlas</p>
           </div>
           <div class="form-group">
-            <label class="form-label">Tallas disponibles <span style="color:var(--primary);">*</span></label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label class="form-label" style="margin:0;">Tallas disponibles <span style="color:var(--primary);">*</span></label>
+              <button class="btn btn-outline btn-xs" id="open-tallas-from-modal" title="Dar de alta nueva talla" style="display:flex;align-items:center;gap:4px;">${Icons.Plus(14)} Nueva talla</button>
+            </div>
             <div class="size-selector" id="tallas-sel">${tallasHtml}</div>
-            <input type="text" id="f-tallas-extra" value="${_form.tallas}" placeholder="Otras tallas separadas por coma: 41, 42..." />
           </div>
           <div class="form-group">
             <div class="publish-row">
@@ -185,6 +253,7 @@ function productModal() {
     </div>`;
 }
 
+// ─── Modal de confirmación de eliminación ─────────────────────
 function deleteModal() {
   return `
     <div class="modal-overlay" id="del-modal">
@@ -201,6 +270,17 @@ function deleteModal() {
     </div>`;
 }
 
+// ─── Sincroniza los inputs del DOM hacia _form (evita reseteo en re-renders) ─
+function _syncFormFromDOM() {
+  const nombre = document.getElementById('f-nombre')?.value;
+  const desc   = document.getElementById('f-desc')?.value;
+  const precio = document.getElementById('f-precio')?.value;
+  if (nombre !== undefined) _form.nombre      = nombre;
+  if (desc   !== undefined) _form.descripcion = desc;
+  if (precio !== undefined) _form.precio_base = precio;
+}
+
+// ─── Eventos del modal de producto ───────────────────────────
 function initModalEvents() {
   const closeModal = () => {
     _imgs.forEach(i => { if (i.file) URL.revokeObjectURL(i.url); });
@@ -215,6 +295,7 @@ function initModalEvents() {
   document.getElementById('file-imgs')?.addEventListener('change', e => {
     Array.from(e.target.files||[]).forEach(f => _imgs.push({ url: URL.createObjectURL(f), file: f }));
     e.target.value = '';
+    _syncFormFromDOM();
     renderCatalogoVendedor();
   });
 
@@ -224,6 +305,7 @@ function initModalEvents() {
       const t = dir==='up' ? i-1 : i+1;
       if (t<0 || t>=_imgs.length) return;
       [_imgs[i],_imgs[t]] = [_imgs[t],_imgs[i]];
+      _syncFormFromDOM();
       renderCatalogoVendedor();
     });
   });
@@ -233,62 +315,291 @@ function initModalEvents() {
       const i = +btn.dataset.ridx;
       if (_imgs[i].file) URL.revokeObjectURL(_imgs[i].url);
       _imgs.splice(i, 1);
+      _syncFormFromDOM();
       renderCatalogoVendedor();
     });
   });
 
-  document.querySelectorAll('#tallas-sel .size-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const t = btn.dataset.talla;
-      _tallasSelected = _tallasSelected.includes(t) ? _tallasSelected.filter(x=>x!==t) : [..._tallasSelected, t];
-      renderCatalogoVendedor();
-    });
+  // Toggle de talla: actualiza clase directamente, sin re-renderizar
+  document.getElementById('tallas-sel')?.addEventListener('click', e => {
+    const btn = e.target.closest('.size-toggle');
+    if (!btn) return;
+    const id = +btn.dataset.tallaId;
+    if (_tallasSelected.includes(id)) {
+      _tallasSelected = _tallasSelected.filter(x => x !== id);
+      btn.classList.remove('selected');
+    } else {
+      _tallasSelected = [..._tallasSelected, id];
+      btn.classList.add('selected');
+    }
   });
 
+  document.getElementById('open-tallas-from-modal')?.addEventListener('click', () => {
+    _syncFormFromDOM();
+    _tallasModal = true; _editingTallaId = null; _newTallaNombre = ''; _newTallaEsNinio = false; _newTallaDesc = '';
+    renderCatalogoVendedor();
+  });
+
+  // Toggle disponible: actualiza ícono directamente, sin re-renderizar
   document.getElementById('toggle-disp')?.addEventListener('click', () => {
-    _form.disponible = !_form.disponible; renderCatalogoVendedor();
+    _form.disponible = !_form.disponible;
+    const btn = document.getElementById('toggle-disp');
+    if (btn) btn.innerHTML = _form.disponible
+      ? `<span style="color:var(--green);">${Icons.ToggleRight(32)}</span>`
+      : Icons.ToggleLeft(32);
   });
 
-  document.getElementById('save-prod')?.addEventListener('click', () => {
-    const nombre     = document.getElementById('f-nombre')?.value.trim() || '';
-    const descripcion= document.getElementById('f-desc')?.value.trim() || '';
-    const precioStr  = document.getElementById('f-precio')?.value || '';
-    const extra      = document.getElementById('f-tallas-extra')?.value || '';
+  document.getElementById('save-prod')?.addEventListener('click', async () => {
+    const nombre      = document.getElementById('f-nombre')?.value.trim() || '';
+    const descripcion = document.getElementById('f-desc')?.value.trim() || '';
+    const precioStr   = document.getElementById('f-precio')?.value || '';
 
-    if (!nombre) { showToast('El nombre es requerido','error'); return; }
+    if (!nombre)                                          { showToast('El nombre es requerido','error'); return; }
     if (!precioStr || isNaN(+precioStr) || +precioStr<=0) { showToast('Ingresa un precio válido','error'); return; }
-    if (_tallasSelected.length===0) { showToast('Selecciona al menos una talla','error'); return; }
+    if (_tallasSelected.length === 0)                     { showToast('Selecciona al menos una talla','error'); return; }
 
-    const tallas = [
-      ...TALLAS_PRESET.filter(t=>_tallasSelected.includes(t)).map(t=>({ talla:t,disponible:true })),
-      ...extra.split(',').map(s=>s.trim()).filter(s=>s&&!TALLAS_PRESET.includes(s)).map(t=>({ talla:t,disponible:true }))
-    ];
+    const saveBtn = document.getElementById('save-prod');
+    if (saveBtn) saveBtn.disabled = true;
 
-    const data = {
-      nombre, descripcion,
-      precio_base: +precioStr,
-      imagenes: _imgs.map((img,i)=>({ url:img.url, orden:i+1 })),
-      tallas,
-      disponible: _form.disponible
-    };
+    try {
+      const payload = {
+        nombre, descripcion,
+        precio_base: +precioStr,
+        disponible:  _form.disponible,
+        ids_tallas:  _tallasSelected
+      };
 
-    if (_modal.mode==='edit') { AppState.editarProducto(_modal.productoId, data); showToast('Producto actualizado'); }
-    else                      { AppState.agregarProducto(data); showToast('Producto agregado al catálogo'); }
+      let productoId;
+      if (_modal.mode === 'new') {
+        const res = await Api.createProducto(payload);
+        productoId = String(res.producto.id_producto);
+      } else {
+        await Api.updateProducto(_modal.productoId, payload);
+        productoId = _modal.productoId;
+      }
 
-    _modal = null; renderCatalogoVendedor();
+      // Sincronizar imágenes
+      if (_modal.mode === 'edit') {
+        // Eliminar todas las imágenes originales y volver a subirlas en el orden actual
+        for (const imgId of _originalImgIds) {
+          try { await Api.deleteImagenProducto(productoId, imgId); } catch(e) {}
+        }
+      }
+      for (let i = 0; i < _imgs.length; i++) {
+        const img = _imgs[i];
+        try {
+          await Api.addImagenProducto(productoId, img.file || img.url, i + 1);
+        } catch(e) {}
+      }
+
+      showToast(_modal.mode === 'new' ? 'Producto agregado al catálogo' : 'Producto actualizado');
+      _modal = null;
+      await loadCatalogoVendedor();
+    } catch (err) {
+      showToast(err.message || 'Error al guardar el producto', 'error');
+      if (saveBtn) saveBtn.disabled = false;
+    }
   });
 }
 
+// ─── Eventos del modal de eliminación ────────────────────────
 function initDeleteEvents() {
   const cancel = () => { _confirmDelete = null; renderCatalogoVendedor(); };
   document.getElementById('cancel-del')?.addEventListener('click', cancel);
   document.getElementById('del-modal')?.addEventListener('click', e => { if (e.target.id==='del-modal') cancel(); });
-  document.getElementById('confirm-del')?.addEventListener('click', () => {
-    AppState.eliminarProducto(_confirmDelete);
-    showToast('Producto eliminado');
-    _confirmDelete = null; _modal = null;
+  document.getElementById('confirm-del')?.addEventListener('click', async () => {
+    const delBtn = document.getElementById('confirm-del');
+    if (delBtn) delBtn.disabled = true;
+    try {
+      await Api.desactivarProducto(_confirmDelete);
+      showToast('Producto eliminado');
+      _confirmDelete = null; _modal = null;
+      await loadCatalogoVendedor();
+    } catch (err) {
+      showToast(err.message || 'Error al eliminar el producto', 'error');
+      _confirmDelete = null;
+      renderCatalogoVendedor();
+    }
+  });
+}
+
+// ─── Modal gestión de tallas ─────────────────────────────────
+function tallasManagerModal() {
+  const rows = _tallas.map(t => {
+    if (_editingTallaId === t.id_talla) {
+      return `
+        <li class="talla-row talla-row-editing" data-tid="${t.id_talla}">
+          <div class="talla-edit-form">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="talla-edit-input" id="talla-edit-nombre" type="text" value="${_editTallaNombre}" maxlength="20" placeholder="Nombre" />
+              <label class="talla-check-label">
+                <input type="checkbox" id="talla-edit-ninio" ${_editTallaEsNinio ? 'checked' : ''} />
+                Niño/a
+              </label>
+            </div>
+            <input class="talla-edit-input" id="talla-edit-desc" type="text" value="${_editTallaDesc}" maxlength="120" placeholder="Descripción (opcional)" style="margin-top:6px;" />
+            <div style="display:flex;gap:6px;margin-top:8px;">
+              <button class="btn btn-primary btn-xs" id="save-talla-edit">Guardar</button>
+              <button class="btn btn-outline btn-xs" id="cancel-talla-edit">Cancelar</button>
+            </div>
+          </div>
+        </li>`;
+    }
+    return `
+      <li class="talla-row" data-tid="${t.id_talla}">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="talla-row-name">${t.nombre}</span>
+            ${t.es_ninio ? `<span class="talla-badge-ninio">Niño/a</span>` : ''}
+          </div>
+          ${t.descripcion ? `<p class="talla-row-desc">${t.descripcion}</p>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="action-btn talla-edit-btn"
+            data-tid="${t.id_talla}"
+            data-nombre="${t.nombre}"
+            data-ninio="${t.es_ninio ? '1' : '0'}"
+            data-desc="${(t.descripcion || '').replace(/"/g, '&quot;')}"
+            title="Editar">${Icons.Pencil(14)}</button>
+          <button class="action-btn talla-del-btn" data-tid="${t.id_talla}" title="Eliminar">${Icons.Trash2(14)}</button>
+        </div>
+      </li>`;
+  }).join('');
+
+  // z-index más alto para aparecer sobre el modal de producto si está abierto
+  const zStyle = _modal ? 'z-index:1100;' : '';
+
+  return `
+    <div class="modal-overlay" id="tallas-modal" style="${zStyle}">
+      <div class="modal-box" style="max-width:440px;">
+        <div class="modal-header">
+          <h3>Gestionar tallas</h3>
+          <button class="modal-close" id="close-tallas-modal">${Icons.X(20)}</button>
+        </div>
+        <div class="modal-body">
+          <p class="form-hint" style="margin-bottom:12px;">Nueva talla</p>
+          <div class="talla-new-form">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" id="new-talla-input" value="${_newTallaNombre}" placeholder="Ej. 42, XXL, Única..." maxlength="20" style="flex:1;" />
+              <label class="talla-check-label">
+                <input type="checkbox" id="new-talla-ninio" ${_newTallaEsNinio ? 'checked' : ''} />
+                Niño/a
+              </label>
+            </div>
+            <input type="text" id="new-talla-desc" value="${_newTallaDesc}" placeholder="Descripción (opcional)" maxlength="120" style="margin-top:8px;width:100%;box-sizing:border-box;" />
+            <button class="btn btn-primary" id="add-talla-btn" style="margin-top:8px;width:100%;">${Icons.Plus(16)} Agregar talla</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+          ${_tallas.length === 0
+            ? `<p style="text-align:center;color:var(--muted-fg);font-size:13px;padding:8px 0;">No hay tallas registradas aún.</p>`
+            : `<ul class="talla-list">${rows}</ul>`
+          }
+        </div>
+      </div>
+    </div>`;
+}
+
+// ─── Eventos del modal de tallas ─────────────────────────────
+function initTallasManagerEvents() {
+  const closeTallas = () => {
+    _tallasModal = false; _editingTallaId = null;
+    _newTallaNombre = ''; _newTallaEsNinio = false; _newTallaDesc = '';
+    _editTallaNombre = ''; _editTallaEsNinio = false; _editTallaDesc = '';
+    renderCatalogoVendedor();
+  };
+
+  document.getElementById('close-tallas-modal')?.addEventListener('click', closeTallas);
+  document.getElementById('tallas-modal')?.addEventListener('click', e => { if (e.target.id === 'tallas-modal') closeTallas(); });
+
+  // Sincronizar estado del formulario de nueva talla al escribir
+  document.getElementById('new-talla-input')?.addEventListener('input',  e => { _newTallaNombre  = e.target.value; });
+  document.getElementById('new-talla-desc')?.addEventListener('input',   e => { _newTallaDesc    = e.target.value; });
+  document.getElementById('new-talla-ninio')?.addEventListener('change', e => { _newTallaEsNinio = e.target.checked; });
+
+  // Crear talla
+  const doCreate = async () => {
+    const nombre = document.getElementById('new-talla-input')?.value.trim() || '';
+    if (!nombre) { showToast('Escribe un nombre para la talla', 'error'); return; }
+    const btn = document.getElementById('add-talla-btn');
+    if (btn) btn.disabled = true;
+    try {
+      const esNinio   = document.getElementById('new-talla-ninio')?.checked ?? false;
+      const descripcion = document.getElementById('new-talla-desc')?.value.trim() || null;
+      await Api.createTalla(nombre, esNinio, descripcion || null);
+      _newTallaNombre = ''; _newTallaEsNinio = false; _newTallaDesc = '';
+      _tallas = await Api.getTallas();
+      showToast(`Talla "${nombre}" creada`);
+      renderCatalogoVendedor();
+    } catch (err) {
+      showToast(err.message || 'Error al crear la talla', 'error');
+      if (btn) btn.disabled = false;
+    }
+  };
+  document.getElementById('add-talla-btn')?.addEventListener('click', doCreate);
+  document.getElementById('new-talla-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') doCreate(); });
+
+  // Botones editar por talla
+  document.querySelectorAll('.talla-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _editingTallaId  = +btn.dataset.tid;
+      _editTallaNombre = btn.dataset.nombre;
+      _editTallaEsNinio = btn.dataset.ninio === '1';
+      _editTallaDesc   = btn.dataset.desc || '';
+      renderCatalogoVendedor();
+    });
+  });
+
+  // Botones eliminar por talla
+  document.querySelectorAll('.talla-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const id = +btn.dataset.tid;
+      try {
+        const res = await Api.deleteTalla(id);
+        showToast(`Talla "${res.talla?.nombre || ''}" eliminada`);
+        _tallas = await Api.getTallas();
+        renderCatalogoVendedor();
+      } catch (err) {
+        showToast(err.message || 'Error al eliminar la talla', 'error');
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Sincronizar estado del formulario de edición inline
+  document.getElementById('talla-edit-nombre')?.addEventListener('input',  e => { _editTallaNombre  = e.target.value; });
+  document.getElementById('talla-edit-desc')?.addEventListener('input',    e => { _editTallaDesc    = e.target.value; });
+  document.getElementById('talla-edit-ninio')?.addEventListener('change',  e => { _editTallaEsNinio = e.target.checked; });
+  document.getElementById('talla-edit-nombre')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  document.getElementById('save-talla-edit')?.click();
+    if (e.key === 'Escape') document.getElementById('cancel-talla-edit')?.click();
+  });
+
+  // Guardar edición
+  document.getElementById('save-talla-edit')?.addEventListener('click', async () => {
+    const nombre = document.getElementById('talla-edit-nombre')?.value.trim() || '';
+    if (!nombre) { showToast('El nombre no puede estar vacío', 'error'); return; }
+    const btn = document.getElementById('save-talla-edit');
+    if (btn) btn.disabled = true;
+    try {
+      const esNinio    = document.getElementById('talla-edit-ninio')?.checked ?? false;
+      const descripcion = document.getElementById('talla-edit-desc')?.value.trim() || null;
+      await Api.updateTalla(_editingTallaId, nombre, esNinio, descripcion || null);
+      showToast(`Talla actualizada`);
+      _tallas = await Api.getTallas();
+      _editingTallaId = null; _editTallaNombre = ''; _editTallaEsNinio = false; _editTallaDesc = '';
+      renderCatalogoVendedor();
+    } catch (err) {
+      showToast(err.message || 'Error al actualizar la talla', 'error');
+      if (btn) btn.disabled = false;
+    }
+  });
+
+  // Cancelar edición
+  document.getElementById('cancel-talla-edit')?.addEventListener('click', () => {
+    _editingTallaId = null; _editTallaNombre = ''; _editTallaEsNinio = false; _editTallaDesc = '';
     renderCatalogoVendedor();
   });
 }
 
-document.addEventListener('DOMContentLoaded', renderCatalogoVendedor);
+document.addEventListener('DOMContentLoaded', loadCatalogoVendedor);

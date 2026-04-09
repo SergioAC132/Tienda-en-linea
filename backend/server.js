@@ -21,6 +21,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/direcciones', direccionRoutes);
 app.use('/api', productoRoutes);
 
+// ------ Archivos subidos (imágenes) ------
+// Ruta actual: database/uploads/
+app.use('/database/uploads', express.static(path.join(__dirname, '..', 'database', 'uploads')));
+// Alias de compatibilidad con registros anteriores guardados como /uploads/
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // ------ Frontend estático ------
 const frontendPath = path.join(__dirname, '..', 'frontend');
 app.use(express.static(frontendPath));

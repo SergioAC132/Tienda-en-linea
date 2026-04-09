@@ -105,12 +105,24 @@ const desactivarProducto = async (req, res) => {
 
 //  IMÁGENES 
 
+// GET /api/admin/productos/:id  — detalle completo para vendedor/admin
+const getProductoAdminById = async (req, res) => {
+  try {
+    const producto = await productoModel.getProductoAdminById(req.params.id);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado.' });
+    res.json(producto);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener el producto.' });
+  }
+};
+
 // POST /api/admin/productos/:id/imagenes
-// Espera que el middleware de multa ya haya procesado el archivo
+// Espera que el middleware de multer ya haya procesado el archivo
 const addImagen = async (req, res) => {
   try {
     const { orden } = req.body;
-    const ruta_imagen = req.file?.path || req.body.ruta_imagen; // ajusta según tu multer config
+    const ruta_imagen = req.file ? `/database/uploads/${req.file.filename}` : req.body.ruta_imagen;
 
     if (!ruta_imagen) return res.status(400).json({ error: 'Debes adjuntar una imagen.' });
 
@@ -148,9 +160,9 @@ const getTallas = async (req, res) => {
 // POST /api/tallas
 const createTalla = async (req, res) => {
   try {
-    const { nombre } = req.body;
+    const { nombre, es_ninio, descripcion } = req.body;
     if (!nombre) return res.status(400).json({ error: 'El campo nombre es requerido.' });
-    const talla = await tallaModel.createTalla(nombre);
+    const talla = await tallaModel.createTalla(nombre, es_ninio ?? false, descripcion ?? null);
     res.status(201).json({ mensaje: 'Talla creada.', talla });
   } catch (err) {
     res.status(500).json({ error: 'Error al crear la talla.' });
@@ -160,9 +172,9 @@ const createTalla = async (req, res) => {
 // PUT /api/tallas/:id
 const updateTalla = async (req, res) => {
   try {
-    const { nombre } = req.body;
+    const { nombre, es_ninio, descripcion } = req.body;
     if (!nombre) return res.status(400).json({ error: 'El campo nombre es requerido.' });
-    const talla = await tallaModel.updateTalla(req.params.id, nombre);
+    const talla = await tallaModel.updateTalla(req.params.id, nombre, es_ninio ?? false, descripcion ?? null);
     if (!talla) return res.status(404).json({ error: 'Talla no encontrada.' });
     res.json({ mensaje: 'Talla actualizada.', talla });
   } catch (err) {
@@ -185,6 +197,7 @@ module.exports = {
   getCatalogo,
   getProductoDetalle,
   getAllProductos,
+  getProductoAdminById,
   createProducto,
   updateProducto,
   desactivarProducto,

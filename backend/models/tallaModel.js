@@ -14,19 +14,19 @@ const getTallaById = async (id) => {
 };
 
 // Crear una nueva talla
-const createTalla = async (nombre) => {
+const createTalla = async (nombre, esNinio, descripcion) => {
   const { rows } = await pool.query(
-    'INSERT INTO tallas (nombre) VALUES ($1) RETURNING *',
-    [nombre]
+    'INSERT INTO tallas (nombre, es_ninio, descripcion) VALUES ($1, $2, $3) RETURNING *',
+    [nombre, esNinio, descripcion]
   );
   return rows[0];
 };
 
 // Actualizar una talla
-const updateTalla = async (id, nombre) => {
+const updateTalla = async (id, nombre, esNinio, descripcion) => {
   const { rows } = await pool.query(
-    'UPDATE tallas SET nombre = $1 WHERE id_talla = $2 RETURNING *',
-    [nombre, id]
+    'UPDATE tallas SET nombre = $1, es_ninio = $2, descripcion = $3 WHERE id_talla = $4 RETURNING *',
+    [nombre, esNinio, descripcion, id]
   );
   return rows[0];
 };

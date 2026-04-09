@@ -163,10 +163,35 @@ const setTallasProducto = async (id_producto, ids_tallas) => {
   return rows;
 };
 
+// Detalle completo de un producto para el panel admin/vendedor (sin filtro activo)
+const getProductoAdminById = async (id) => {
+  const { rows: productoRows } = await pool.query(
+    'SELECT * FROM productos WHERE id_producto = $1',
+    [id]
+  );
+  if (!productoRows[0]) return null;
+
+  const { rows: imagenes } = await pool.query(
+    'SELECT id_imagen, url_imagen, orden FROM imagen_producto WHERE id_producto = $1 ORDER BY orden ASC',
+    [id]
+  );
+
+  const { rows: tallas } = await pool.query(`
+    SELECT t.id_talla, t.nombre
+    FROM tallas t
+    INNER JOIN productos_tallas pt ON pt.id_talla = t.id_talla
+    WHERE pt.id_producto = $1
+    ORDER BY t.nombre ASC
+  `, [id]);
+
+  return { ...productoRows[0], imagenes, tallas };
+};
+
 module.exports = {
   getProductosCatalogo,
   getAllProductos,
   getProductoById,
+  getProductoAdminById,
   createProducto,
   updateProducto,
   desactivarProducto,
