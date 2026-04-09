@@ -124,8 +124,31 @@ function renderCarrito() {
     const dirId = document.getElementById('address-select')?.value || defaultDirId;
     const comentarios = commentsEl?.value || '';
     if (!dirId) return;
-    const pedido = AppState.crearPedido(dirId, comentarios);
-    Nav.go(Nav.pago(pedido.id));
+    // const pedido = AppState.crearPedido(dirId, comentarios);
+    // Nav.go(Nav.pago(pedido.id));
+
+    // Deshabilitar el botón para evitar envíos duplicados mientras procesa
+    const btn = document.getElementById('confirm-order');
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+
+    // Registrar el pedido en la base de datos.
+    // El total se calcula desde el carrito del localStorage, independientemente
+    // de si los productos son reales o de prueba — la API solo necesita el total.
+    Api.crearPedido({ total, comentarios })
+      .then(apiResp => {
+        // Pedido guardado en la BD. Pasamos el id_pedido real al estado local
+        // para que pago.js pueda llamar a PATCH /api/pedidos/:id/pagar
+        // y actualizar el estado en la BD cuando el cliente registre su pago.
+        const pedidoLocal = AppState.crearPedido(dirId, comentarios, apiResp.id_pedido);
+        Nav.go(Nav.pago(pedidoLocal.id));
+      })
+      .catch(err => {
+        // Si la API falla no se avanza — el carrito queda intacto
+        showToast(err.message || 'Error al crear el pedido. Intenta de nuevo.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Confirmar pedido';
+      });
   });
 }
 
