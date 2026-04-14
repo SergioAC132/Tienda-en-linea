@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "node-pg-migrate up --migrations-dir ../database/migrations && nodemon server.js",
+    "migrate": "node-pg-migrate up --migrations-dir ../database/migrations",
+    "migrate:down": "node-pg-migrate down --migrations-dir ../database/migrations",
+    "migrate:redo": "node-pg-migrate redo --migrations-dir ../database/migrations"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -14,7 +17,9 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "pg": "^8.11.5"
+    "node-pg-migrate": "^8.0.4",
+    "nodemailer": "^8.0.5",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
