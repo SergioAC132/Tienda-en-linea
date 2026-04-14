@@ -6,6 +6,7 @@ const path = require('path');
 const authRoutes = require('./routes/auth.routes');
 const direccionRoutes = require('./routes/direccion.routes');
 const pedidoRoutes = require('./routes/pedido.routes');
+const productoRoutes = require('./routes/productoRoutes');
 
 dotenv.config();
 
@@ -20,6 +21,13 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/direcciones', direccionRoutes);
 app.use('/api/pedidos', pedidoRoutes);
+app.use('/api', productoRoutes);
+
+// ------ Archivos subidos (imágenes) ------
+// Ruta actual: database/uploads/
+app.use('/database/uploads', express.static(path.join(__dirname, '..', 'database', 'uploads')));
+// Alias de compatibilidad con registros anteriores guardados como /uploads/
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ------ Frontend estático ------
 const frontendPath = path.join(__dirname, '..', 'frontend');

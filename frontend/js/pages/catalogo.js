@@ -1,14 +1,30 @@
 // ===== CATALOG PAGE =====
-let _catalogOrder = 'fecha';
+let _catalogOrder    = 'fecha';
+let _catalogProductos = null; // cache tras el primer fetch
 
-function renderCatalogo() {
+async function renderCatalogo() {
   if (!requireAuth(['CLIENTE'])) return;
   renderHeader();
 
   const root = document.getElementById('app-root');
-  let productos = [...AppState.productos];
 
-  if (_catalogOrder === 'precio_asc') productos.sort((a, b) => a.precio_base - b.precio_base);
+  // Primera carga: obtener datos de la API
+  if (!_catalogProductos) {
+    root.innerHTML = `<div style="text-align:center;padding:48px;color:var(--muted-fg);">Cargando catálogo...</div>`;
+    try {
+      _catalogProductos = await Api.getCatalogo();
+    } catch (err) {
+      root.innerHTML = `
+        <div class="empty-state">
+          <p style="color:var(--destructive);">Error al cargar el catálogo. Intenta de nuevo más tarde.</p>
+        </div>`;
+      return;
+    }
+  }
+
+  let productos = [..._catalogProductos];
+
+  if (_catalogOrder === 'precio_asc')  productos.sort((a, b) => a.precio_base - b.precio_base);
   else if (_catalogOrder === 'precio_desc') productos.sort((a, b) => b.precio_base - a.precio_base);
   else productos.sort((a, b) => new Date(b.fecha_publicacion) - new Date(a.fecha_publicacion));
 

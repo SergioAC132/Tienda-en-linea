@@ -19,10 +19,7 @@ function renderPago() {
     return;
   }
 
-  // pedido.items existe cuando el pedido viene del flujo del carrito (localStorage).
-  // Si viene de la API (desde "Mis Pedidos"), items no está disponible aún —
-  // eso corresponde al módulo de detalle_pedidos que será integrado después.
-  const itemsHtml = (pedido.items || []).map(item => `
+  const itemsHtml = pedido.items.map(item => `
     <div class="summary-row" style="margin-bottom:10px;font-size:13px;">
       <span>${item.nombre} (Talla: ${item.talla}) x${item.cantidad}</span>
       <span>$${formatCurrency(item.subtotal)}</span>
@@ -102,12 +99,11 @@ function renderPago() {
             <span style="font-family:var(--font-serif);">Total</span>
             <span class="total-amount">$${formatCurrency(pedido.total)} MXN</span>
           </div>
-          ${pedido.direccion ? `
           <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
             <p style="font-size:12px;color:var(--muted-fg);margin-bottom:6px;">Dirección de entrega:</p>
             <p>${pedido.direccion.nombre_completo}</p>
             <p style="font-size:12px;color:var(--muted-fg);">${pedido.direccion.calle}, ${pedido.direccion.ciudad}, ${pedido.direccion.estado} ${pedido.direccion.codigo_postal}</p>
-          </div>` : ''}
+          </div>
         </div>
 
         <!-- Pago -->
