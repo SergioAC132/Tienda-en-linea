@@ -1,6 +1,8 @@
-const bcrypt      = require('bcryptjs');
-const jwt         = require('jsonwebtoken');
-const authModel   = require('../models/auth.model');
+const crypto                   = require('crypto');
+const bcrypt                   = require('bcryptjs');
+const jwt                      = require('jsonwebtoken');
+const authModel                = require('../models/auth.model');
+const { sendPasswordResetEmail } = require('../utils/email');
  
 /* POST /api/auth/login
    Body: { email, password }*/
@@ -109,7 +111,87 @@ const register = async (req, res) => {
   }
 };
  
+/* POST /api/auth/forgot-password
+   Body: { email }
+   Genera un token de recuperación y envía el enlace por correo.
+   Siempre responde 200 para no revelar si el correo existe. */
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: 'El correo es requerido.' });
+  }
+
+  try {
+    const usuario = await authModel.findUserByEmail(email);
+
+    if (usuario) {
+      const token  = crypto.randomBytes(32).toString('hex');
+      const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+      await authModel.saveResetToken(usuario.id_usuario, token, expiry);
+
+      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+      await sendPasswordResetEmail(email, resetLink);
+    }
+
+    return res.status(200).json({
+      message: 'Si el correo está registrado, recibirás un enlace de recuperación.',
+    });
+  } catch (error) {
+    console.error('Error en forgotPassword:', error.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+};
+
+/* POST /api/auth/reset-password
+   Body: { token, password, confirmPassword }
+   Valida el token y actualiza la contraseña. */
+const resetPassword = async (req, res) => {
+  const { token, password, confirmPassword } = req.body;
+
+  if (!token || !password || !confirmPassword) {
+    return res.status(400).json({ message: 'Todos los campos son requeridos.' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres.' });
+  }
+
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: 'Las contraseñas no coinciden.' });
+  }
+
+  try {
+    const usuario = await authModel.findUserByResetToken(token);
+
+    if (!usuario) {
+      return res.status(400).json({ message: 'El enlace es inválido o ha expirado.' });
+    }
+
+    if (new Date() > new Date(usuario.reset_token_expiry)) {
+      return res.status(400).json({ message: 'El enlace ha expirado. Solicita uno nuevo.' });
+    }
+
+    const mismaPassword = await bcrypt.compare(password, usuario.password);
+    if (mismaPassword) {
+      return res.status(400).json({ message: 'La nueva contraseña no puede ser igual a la anterior.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await authModel.updatePassword(usuario.id_usuario, passwordHash);
+    await authModel.clearResetToken(usuario.id_usuario);
+
+    return res.status(200).json({ message: 'Contraseña restablecida exitosamente.' });
+  } catch (error) {
+    console.error('Error en resetPassword:', error.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+};
+
 module.exports = {
   login,
   register,
+  forgotPassword,
+  resetPassword,
 };

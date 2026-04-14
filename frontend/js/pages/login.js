@@ -43,6 +43,12 @@ function renderLogin() {
             </div>
           </div>
 
+          <div style="text-align:right;margin-top:4px;margin-bottom:4px;">
+            <a href="/olvidar-password" style="font-size:13px;color:var(--accent);text-decoration:none;">
+              ¿Olvidaste tu contraseña?
+            </a>
+          </div>
+
           <button class="btn btn-primary btn-full btn-lg" id="login-btn" ${_loading ? 'disabled' : ''}>
             ${_loading ? 'Ingresando...' : 'Entrar'}
           </button>
@@ -104,7 +110,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
   renderLogin();
-  if (new URLSearchParams(window.location.search).get('registered')) {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('registered')) {
     showToast('Cuenta creada exitosamente. Inicia sesión.', 'success');
+  }
+  if (params.get('reset')) {
+    showToast('Contraseña restablecida exitosamente. Inicia sesión.', 'success');
   }
 });

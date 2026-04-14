@@ -22,7 +22,45 @@ const createUser = async ({ nombre, email, password, telefono }) => {
   return rows[0];
 };
  
+/* Guarda un token de recuperación y su fecha de expiración para el usuario. */
+const saveResetToken = async (id_usuario, token, expiry) => {
+  await pool.query(
+    'UPDATE usuarios SET reset_token = $1, reset_token_expiry = $2 WHERE id_usuario = $3',
+    [token, expiry, id_usuario]
+  );
+};
+
+/* Busca un usuario por su token de recuperación.
+   Incluye password para validar que la nueva sea distinta. */
+const findUserByResetToken = async (token) => {
+  const { rows } = await pool.query(
+    'SELECT id_usuario, email, password, reset_token_expiry FROM usuarios WHERE reset_token = $1',
+    [token]
+  );
+  return rows[0] || null;
+};
+
+/* Elimina el token de recuperación tras usarlo. */
+const clearResetToken = async (id_usuario) => {
+  await pool.query(
+    'UPDATE usuarios SET reset_token = NULL, reset_token_expiry = NULL WHERE id_usuario = $1',
+    [id_usuario]
+  );
+};
+
+/* Actualiza el hash de contraseña del usuario. */
+const updatePassword = async (id_usuario, passwordHash) => {
+  await pool.query(
+    'UPDATE usuarios SET password = $1 WHERE id_usuario = $2',
+    [passwordHash, id_usuario]
+  );
+};
+
 module.exports = {
   findUserByEmail,
   createUser,
+  saveResetToken,
+  findUserByResetToken,
+  clearResetToken,
+  updatePassword,
 };

@@ -46,6 +46,28 @@ const Api = {
     return data;
   },
 
+  async forgotPassword(email) {
+    const res = await fetch(`${API_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (!res.ok) throw { status: res.status, message: data.message || 'Error al enviar correo' };
+    return data; // { message }
+  },
+
+  async resetPassword(token, password, confirmPassword) {
+    const res = await fetch(`${API_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password, confirmPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) throw { status: res.status, message: data.message || 'Error al restablecer contraseña' };
+    return data; // { message }
+  },
+
   async modificarDireccion(idDireccion, direccionData) {
     const token = AppState.getToken();
     const res = await fetch(`${API_URL}/direcciones/${idDireccion}`, {
