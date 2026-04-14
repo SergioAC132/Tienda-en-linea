@@ -30,8 +30,11 @@ const getAllProductos = async () => {
       p.precio_base,
       p.disponible,
       p.activo,
-      p.fecha_publicacion
+      p.fecha_publicacion,
+      img.url_imagen AS imagen_principal
     FROM productos p
+    LEFT JOIN imagen_producto img
+      ON img.id_producto = p.id_producto AND img.orden = 1
     ORDER BY p.fecha_publicacion DESC
   `);
   return rows;
