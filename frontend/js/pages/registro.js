@@ -1,5 +1,4 @@
 // ===== REGISTRO PAGE =====
-let _loading = false;
 
 function renderRegistro() {
   const root = document.getElementById('app-root');
@@ -64,8 +63,8 @@ function renderRegistro() {
             </div>
           </div>
 
-          <button class="btn btn-primary btn-full btn-lg" id="register-btn" ${_loading ? 'disabled' : ''}>
-            ${_loading ? 'Registrando...' : 'Crear cuenta'}
+          <button class="btn btn-primary btn-full btn-lg" id="register-btn">
+            Crear cuenta
           </button>
 
           <p style="text-align:center;margin-top:16px;font-size:14px;color:var(--muted-fg);">
@@ -103,33 +102,71 @@ function showFormError(msg) {
   if (el) { el.textContent = msg; el.style.display = 'block'; }
 }
 
+function setFieldError(fieldId, hasError) {
+  const input = document.getElementById(fieldId);
+  if (!input) return;
+  input.style.borderColor = hasError ? 'var(--destructive)' : '';
+}
+
+function clearFieldErrors() {
+  ['reg-nombre', 'reg-email', 'reg-telefono', 'reg-password', 'conf-password'].forEach(id => {
+    setFieldError(id, false);
+  });
+  const el = document.getElementById('form-error');
+  if (el) el.style.display = 'none';
+}
+
 async function doRegister() {
-  const nombre   = document.getElementById('reg-nombre')?.value.trim();
-  const email    = document.getElementById('reg-email')?.value.trim();
-  const telefono = document.getElementById('reg-telefono')?.value.trim();
-  const password = document.getElementById('reg-password')?.value;
+  clearFieldErrors();
+
+  const nombre          = document.getElementById('reg-nombre')?.value.trim();
+  const email           = document.getElementById('reg-email')?.value.trim();
+  const telefono        = document.getElementById('reg-telefono')?.value.trim();
+  const password        = document.getElementById('reg-password')?.value;
   const confirmPassword = document.getElementById('conf-password')?.value;
 
-  if (!nombre || !email || !telefono || !password || !confirmPassword) {
+  let hasEmpty = false;
+  if (!nombre)          { setFieldError('reg-nombre', true);    hasEmpty = true; }
+  if (!email)           { setFieldError('reg-email', true);     hasEmpty = true; }
+  if (!telefono)        { setFieldError('reg-telefono', true);  hasEmpty = true; }
+  if (!password)        { setFieldError('reg-password', true);  hasEmpty = true; }
+  if (!confirmPassword) { setFieldError('conf-password', true); hasEmpty = true; }
+
+  if (hasEmpty) {
     showFormError('Por favor completa todos los campos.');
     return;
   }
 
   if (password !== confirmPassword) {
+    setFieldError('reg-password', true);
+    setFieldError('conf-password', true);
     showFormError('Las contraseñas no coinciden.');
     return;
   }
 
-  _loading = true;
-  renderRegistro();
+  const btn = document.getElementById('register-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Registrando...'; }
 
   try {
     await Api.register(nombre, email, password, confirmPassword, telefono);
     Nav.go('/login?registered=1');
   } catch (err) {
-    _loading = false;
-    renderRegistro();
-    showFormError(err.message || 'Error al registrarse. Intenta de nuevo.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Crear cuenta'; }
+
+    const msg = err.message || 'Error al registrarse. Intenta de nuevo.';
+
+    if (msg.includes('correo electrónico válido') || msg.includes('cuenta con ese correo')) {
+      setFieldError('reg-email', true);
+    } else if (msg.includes('teléfono')) {
+      setFieldError('reg-telefono', true);
+    } else if (msg.includes('contraseña') && msg.includes('8')) {
+      setFieldError('reg-password', true);
+    } else if (msg.includes('contraseñas no coinciden')) {
+      setFieldError('reg-password', true);
+      setFieldError('conf-password', true);
+    }
+
+    showFormError(msg);
   }
 }
 

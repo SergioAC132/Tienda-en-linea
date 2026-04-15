@@ -65,6 +65,10 @@ const register = async (req, res) => {
   if (!nombre || !email || !password || !confirmPassword || !telefono) {
     return res.status(400).json({ message: 'Este campo es requerido.' });
   }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Ingresa un correo electrónico válido.' });
+  }
  
   if (!/^\d{10}$/.test(telefono)) {
     return res.status(400).json({
