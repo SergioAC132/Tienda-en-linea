@@ -57,7 +57,7 @@ const getProductoById = async (id) => {
 
   // Tallas asociadas
   const { rows: tallas } = await pool.query(`
-    SELECT t.id_talla, t.nombre
+    SELECT t.id_talla, t.nombre, pt.stock
     FROM tallas t
     INNER JOIN productos_tallas pt ON pt.id_talla = t.id_talla
     WHERE pt.id_producto = $1

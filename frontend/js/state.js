@@ -141,12 +141,55 @@ const AppState = (function () {
     getCarritoCount() { return s.carrito.reduce((n, i) => n + i.cantidad, 0); },
     getCarritoTotal() { return s.carrito.reduce((n, i) => n + i.precio_base * i.cantidad, 0); },
 
-    agregarAlCarrito(productoId, talla, cantidad) {
-      const p = this.getProducto(productoId);
+    /**
+     * Reemplaza el carrito local con los items que devuelve la API.
+     * Normaliza los campos de la BD al shape que usa el frontend.
+     * Se llama al iniciar sesión y al cargar la página del carrito.
+     *
+     * @param {Array} apiItems - items devueltos por GET /api/carrito
+     */
+    setCarritoFromApi(apiItems) {
+      s.carrito = (apiItems || []).map(item => ({
+        productoId:      String(item.id_producto),
+        id_talla:        item.id_talla,
+        talla:           item.talla,
+        cantidad:        item.cantidad,
+        nombre:          item.nombre,
+        precio_base:     Number(item.precio_base),
+        imagenUrl:       item.imagen_url || null,
+        stockDisponible: item.stock_disponible,
+      }));
+      save(s);
+    },
+
+    agregarAlCarrito(productoId, talla, cantidad, productoData) {
+      const p = productoData || this.getProducto(productoId);
       if (!p) return;
+      const tallaInfo = p.tallas?.find(t => t.talla === talla);
+      const stockDisponible = tallaInfo ? (tallaInfo.stock ?? 0) : 0;
       const ex = s.carrito.find(i => i.productoId === productoId && i.talla === talla);
-      if (ex) { ex.cantidad += cantidad; }
-      else { s.carrito.push({ productoId, talla, cantidad, nombre: p.nombre, precio_base: p.precio_base, imagenUrl: p.imagenes[0]?.url }); }
+      if (ex) {
+        ex.cantidad = Math.min(ex.cantidad + cantidad, stockDisponible);
+        ex.stockDisponible = stockDisponible;
+      } else {
+        s.carrito.push({
+          productoId,
+          id_talla:        tallaInfo?.id_talla,
+          talla,
+          cantidad:        Math.min(cantidad, stockDisponible),
+          nombre:          p.nombre,
+          precio_base:     p.precio_base,
+          imagenUrl:       p.imagenes[0]?.url,
+          stockDisponible,
+        });
+      }
+      save(s);
+    },
+    modificarCantidadCarrito(productoId, talla, nuevaCantidad) {
+      const item = s.carrito.find(i => i.productoId === productoId && i.talla === talla);
+      if (!item) return;
+      if (nuevaCantidad < 1) { this.eliminarDelCarrito(productoId, talla); return; }
+      item.cantidad = Math.min(nuevaCantidad, item.stockDisponible ?? nuevaCantidad);
       save(s);
     },
     eliminarDelCarrito(productoId, talla) {

@@ -37,7 +37,7 @@ const Api = {
           ? [{ url: this._normImgUrl(p.imagen_principal), orden: 1 }]
           : [],
       tallas: p.tallas
-        ? p.tallas.map(t => ({ id_talla: t.id_talla, talla: t.nombre, disponible: true }))
+        ? p.tallas.map(t => ({ id_talla: t.id_talla, talla: t.nombre, stock: t.stock ?? 0, disponible: (t.stock ?? 0) > 0 }))
         : []
     };
   },
@@ -259,6 +259,56 @@ const Api = {
     });
     const data = await res.json();
     if (!res.ok) throw { status: res.status, message: data.message || 'Error al registrar el pago del pedido' };
+  },
+
+  // ─── Carrito ─────────────────────────────────────────────────
+
+  /** GET /api/carrito — devuelve { id_carrito, items: [...] } */
+  async getCarrito() {
+    return await this._req('/carrito');
+  },
+
+  /**
+   * POST /api/carrito/items
+   * Agrega un item o suma su cantidad si ya existe.
+   * @param {number} idProducto
+   * @param {number} idTalla
+   * @param {number} cantidad
+   */
+  async agregarItemCarrito(idProducto, idTalla, cantidad) {
+    return await this._req('/carrito/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_producto: idProducto, id_talla: idTalla, cantidad }),
+    });
+  },
+
+  /**
+   * PUT /api/carrito/items/:id_producto/:id_talla
+   * Establece la cantidad exacta. Si cantidad = 0 elimina el item.
+   * @param {number} idProducto
+   * @param {number} idTalla
+   * @param {number} cantidad
+   */
+  async actualizarItemCarrito(idProducto, idTalla, cantidad) {
+    return await this._req(`/carrito/items/${idProducto}/${idTalla}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cantidad }),
+    });
+  },
+
+  /**
+   * DELETE /api/carrito/items/:id_producto/:id_talla
+   * Elimina un item específico del carrito.
+   */
+  async eliminarItemCarrito(idProducto, idTalla) {
+    return await this._req(`/carrito/items/${idProducto}/${idTalla}`, { method: 'DELETE' });
+  },
+
+  /** DELETE /api/carrito — vacía todo el carrito */
+  async vaciarCarrito() {
+    return await this._req('/carrito', { method: 'DELETE' });
   },
 
   // ─── Catálogo público (UC-03) ────────────────────────────────

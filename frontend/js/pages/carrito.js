@@ -22,7 +22,9 @@ function renderCarrito() {
   const principal = direcciones.find(d => d.es_principal);
   const defaultDirId = principal?.id || direcciones[0]?.id || '';
 
-  const itemsHtml = carrito.map(item => `
+  const itemsHtml = carrito.map(item => {
+    const atMax = item.cantidad >= (item.stockDisponible ?? item.cantidad);
+    return `
     <div class="cart-item">
       <div class="cart-item-img">
         ${item.imagenUrl ? `<img src="${item.imagenUrl}" alt="${item.nombre}" />` : ''}
@@ -30,14 +32,23 @@ function renderCarrito() {
       <div class="cart-item-info">
         <h3 class="cart-item-name">${item.nombre}</h3>
         <p class="cart-item-meta">Talla: ${item.talla}</p>
-        <p class="cart-item-meta">Cantidad: ${item.cantidad}</p>
+        <div class="qty-control" style="margin:8px 0;">
+          <button class="qty-btn cart-qty-minus"
+            data-pid="${item.productoId}" data-talla="${item.talla}" data-id-talla="${item.id_talla}">−</button>
+          <span class="qty-display">${item.cantidad}</span>
+          <button class="qty-btn cart-qty-plus"
+            data-pid="${item.productoId}" data-talla="${item.talla}" data-id-talla="${item.id_talla}"
+            ${atMax ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>+</button>
+        </div>
+        ${item.stockDisponible != null ? `<p style="font-size:12px;color:var(--muted-fg);">${item.stockDisponible} disponible${item.stockDisponible !== 1 ? 's' : ''} en talla ${item.talla}</p>` : ''}
         <p class="cart-item-price">$${formatCurrency(item.precio_base * item.cantidad)} MXN</p>
       </div>
-      <button class="cart-remove" data-pid="${item.productoId}" data-talla="${item.talla}">
+      <button class="cart-remove"
+        data-pid="${item.productoId}" data-talla="${item.talla}" data-id-talla="${item.id_talla}">
         ${Icons.Trash2(20)}
       </button>
     </div>
-  `).join('');
+  `}).join('');
 
   const addressSection = direcciones.length === 0
     ? `<div style="background:rgba(42,42,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;">
@@ -98,8 +109,34 @@ function renderCarrito() {
 
   document.querySelectorAll('.cart-remove').forEach(btn => {
     btn.addEventListener('click', () => {
-      AppState.eliminarDelCarrito(btn.dataset.pid, btn.dataset.talla);
+      const { pid, talla, idTalla } = btn.dataset;
+      AppState.eliminarDelCarrito(pid, talla);
       renderCarrito();
+      if (idTalla) Api.eliminarItemCarrito(Number(pid), Number(idTalla)).catch(() => {});
+    });
+  });
+
+  document.querySelectorAll('.cart-qty-minus').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { pid, talla, idTalla } = btn.dataset;
+      const item = AppState.carrito.find(i => i.productoId === pid && i.talla === talla);
+      if (!item) return;
+      const nuevaCantidad = item.cantidad - 1;
+      AppState.modificarCantidadCarrito(pid, talla, nuevaCantidad);
+      renderCarrito();
+      if (idTalla) Api.actualizarItemCarrito(Number(pid), Number(idTalla), nuevaCantidad).catch(() => {});
+    });
+  });
+
+  document.querySelectorAll('.cart-qty-plus').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { pid, talla, idTalla } = btn.dataset;
+      const item = AppState.carrito.find(i => i.productoId === pid && i.talla === talla);
+      if (!item) return;
+      const nuevaCantidad = item.cantidad + 1;
+      AppState.modificarCantidadCarrito(pid, talla, nuevaCantidad);
+      renderCarrito();
+      if (idTalla) Api.actualizarItemCarrito(Number(pid), Number(idTalla), nuevaCantidad).catch(() => {});
     });
   });
 
@@ -137,9 +174,9 @@ function renderCarrito() {
     // de si los productos son reales o de prueba — la API solo necesita el total.
     Api.crearPedido({ total, comentarios })
       .then(apiResp => {
-        // Pedido guardado en la BD. Pasamos el id_pedido real al estado local
-        // para que pago.js pueda llamar a PATCH /api/pedidos/:id/pagar
-        // y actualizar el estado en la BD cuando el cliente registre su pago.
+        // Vaciar carrito en BD (fire-and-forget; el pedido ya está creado)
+        Api.vaciarCarrito().catch(() => {});
+        // Crear el pedido en estado local (también limpia el carrito local)
         const pedidoLocal = AppState.crearPedido(dirId, comentarios, apiResp.id_pedido);
         Nav.go(Nav.pago(pedidoLocal.id));
       })
@@ -153,7 +190,7 @@ function renderCarrito() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  Api.getDirecciones()
+  const cargarDirecciones = Api.getDirecciones()
     .then(data => {
       const normalizadas = data.map(d => ({
         id: d.id_direccion, usuario_id: d.id_usuario,
@@ -165,6 +202,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }));
       AppState.setDirecciones(normalizadas);
     })
-    .catch(() => {})
-    .finally(() => renderCarrito());
+    .catch(() => {});
+
+  // Sincronizar carrito desde la BD para reflejar cambios de otras sesiones
+  const cargarCarrito = Api.getCarrito()
+    .then(data => AppState.setCarritoFromApi(data.items))
+    .catch(() => {});
+
+  Promise.all([cargarDirecciones, cargarCarrito]).finally(() => renderCarrito());
 });

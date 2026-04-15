@@ -39,7 +39,9 @@ async function renderDetalle() {
 
   const imagenes          = [...producto.imagenes].sort((a, b) => a.orden - b.orden);
   const tallasDisponibles = producto.tallas.filter(t => t.disponible);
-  const puedeAgregar      = producto.disponible && tallasDisponibles.length > 0 && _talla;
+  const tallaActual       = producto.tallas.find(t => t.talla === _talla);
+  const stockActual       = tallaActual ? tallaActual.stock : 0;
+  const puedeAgregar      = producto.disponible && tallasDisponibles.length > 0 && _talla && stockActual > 0;
 
   const galleryHtml = imagenes.map((img, i) => `
     <div class="detail-gallery-img">
@@ -69,8 +71,9 @@ async function renderDetalle() {
         <div class="qty-control">
           <button class="qty-btn" id="qty-minus">−</button>
           <span class="qty-display">${_cantidad}</span>
-          <button class="qty-btn" id="qty-plus">+</button>
+          <button class="qty-btn" id="qty-plus" ${_talla && _cantidad >= stockActual ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>+</button>
         </div>
+        ${_talla ? `<p class="stock-info" style="margin:8px 0 0;font-size:13px;color:${stockActual <= 3 ? 'var(--danger, #e53e3e)' : 'var(--muted-fg)'};">${stockActual} pieza${stockActual !== 1 ? 's' : ''} disponible${stockActual !== 1 ? 's' : ''}</p>` : ''}
       </div>
       <button id="add-cart"
         class="btn btn-full btn-lg ${puedeAgregar?'btn-primary':''}"
@@ -97,21 +100,40 @@ async function renderDetalle() {
   `;
 
   document.querySelectorAll('.size-btn:not(.disabled)').forEach(btn => {
-    btn.addEventListener('click', () => { _talla = btn.dataset.talla; renderDetalle(); });
+    btn.addEventListener('click', () => {
+      _talla = btn.dataset.talla;
+      const tallaSeleccionada = producto.tallas.find(t => t.talla === _talla);
+      const stockTalla = tallaSeleccionada ? tallaSeleccionada.stock : 0;
+      if (_cantidad > stockTalla) _cantidad = Math.max(1, stockTalla);
+      renderDetalle();
+    });
   });
 
   document.getElementById('qty-minus')?.addEventListener('click', () => {
     if (_cantidad > 1) { _cantidad--; renderDetalle(); }
   });
-  document.getElementById('qty-plus')?.addEventListener('click', () => { _cantidad++; renderDetalle(); });
+  document.getElementById('qty-plus')?.addEventListener('click', () => {
+    if (_cantidad < stockActual) { _cantidad++; renderDetalle(); }
+  });
 
   document.getElementById('add-cart')?.addEventListener('click', () => {
     if (!puedeAgregar) { showToast('Selecciona una talla disponible', 'error'); return; }
-    AppState.agregarAlCarrito(productoId, _talla, _cantidad);
+
+    const tallaInfo     = producto.tallas.find(t => t.talla === _talla);
+    const cantidadLocal = _cantidad;
+
+    // Actualización optimista: el carrito local refleja el cambio de inmediato
+    AppState.agregarAlCarrito(productoId, _talla, cantidadLocal, producto);
     showToast(`${producto.nombre} agregado al carrito`);
     _talla = ''; _cantidad = 1;
     renderHeader();
     renderDetalle();
+
+    // Persistencia en BD en segundo plano
+    if (tallaInfo?.id_talla) {
+      Api.agregarItemCarrito(Number(productoId), tallaInfo.id_talla, cantidadLocal)
+        .catch(() => {});   // fallo silencioso — el item ya está en el carrito local
+    }
   });
 }
 

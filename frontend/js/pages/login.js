@@ -96,6 +96,14 @@ async function doLogin() {
   try {
     const data = await Api.login(email, password);
     AppState.setCurrentUser(data.usuario, data.token);
+
+    // Restaurar el carrito guardado en BD para clientes
+    if (data.usuario.rol === 'CLIENTE') {
+      Api.getCarrito()
+        .then(c => AppState.setCarritoFromApi(c.items))
+        .catch(() => {});
+    }
+
     Nav.go(data.usuario.rol === 'CLIENTE' ? Nav.catalogo : Nav.dashboard);
   } catch (err) {
     _loading = false;
