@@ -9,23 +9,75 @@ const pool = require('../config/db');
 
 
 /**
- * Crea un nuevo pedido para el usuario autenticado.
- * El estado se establece automáticamente como 'pendiente'
- * y la fecha como el momento actual (NOW()).
+ * Crea un nuevo pedido para el usuario autenticado y registra el detalle
+ * de productos tomando los items actuales del carrito del usuario.
+ * Toda la operación se ejecuta en una única transacción: si falla algún
+ * INSERT en detalle_pedidos el pedido completo se revierte.
  *
- * @param {number} idUsuario        - ID del cliente que hace el pedido (viene del token JWT)
- * @param {number} total            - Total del pedido calculado desde el carrito en el frontend
+ * @param {number} idUsuario        - ID del cliente (viene del token JWT)
+ * @param {number} total            - Total calculado en el frontend desde el carrito
+ * @param {number} idDireccion      - ID de la dirección de entrega seleccionada
  * @param {string|null} comentarios - Comentarios opcionales del cliente
  * @returns {Object} El pedido recién creado con todos sus campos
  */
-const createPedido = async (idUsuario, total, comentarios) => {
-    const { rows } = await pool.query(
-        `INSERT INTO pedidos (id_usuario, fecha_pedido, estado, total, comentarios_cliente)
-         VALUES ($1, NOW(), 'pendiente', $2, $3)
-         RETURNING id_pedido, id_usuario, fecha_pedido, estado, total, comentarios_cliente, comentarios_vendedor`,
-        [idUsuario, total, comentarios || null] //REVISAR
-    );
-    return rows[0];
+const createPedido = async (idUsuario, total, idDireccion, comentarios) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Insertar el pedido principal
+        const { rows: pedidoRows } = await client.query(
+            `INSERT INTO pedidos (id_usuario, fecha_pedido, estado, total, id_direccion, comentarios_cliente)
+             VALUES ($1, NOW(), 'pendiente', $2, $3, $4)
+             RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
+                       id_direccion, comentarios_cliente, comentarios_vendedor`,
+            [idUsuario, total, idDireccion, comentarios || null]
+        );
+        const pedido = pedidoRows[0];
+
+        // 2. Obtener los items del carrito activo del usuario
+        const { rows: carritoItems } = await client.query(
+            `SELECT ci.id_producto, ci.id_talla, ci.cantidad, p.precio_base
+             FROM carrito_items ci
+             JOIN carritos  c ON c.id_carrito  = ci.id_carrito
+             JOIN productos p ON p.id_producto = ci.id_producto
+             WHERE c.id_usuario = $1`,
+            [idUsuario]
+        );
+
+        // 3. Insertar un registro en detalle_pedidos por cada item del carrito
+        //    y reducir el stock de productos_tallas en la misma transacción.
+        //    El total del ítem es precio_base × cantidad (precio al momento de compra).
+        for (const item of carritoItems) {
+            const totalItem = Number(item.precio_base) * item.cantidad;
+            await client.query(
+                `INSERT INTO detalle_pedidos (id_pedido, id_producto, id_talla, cantidad, total)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [pedido.id_pedido, item.id_producto, item.id_talla, item.cantidad, totalItem]
+            );
+
+            const { rowCount } = await client.query(
+                `UPDATE productos_tallas
+                 SET stock = stock - $1
+                 WHERE id_producto = $2 AND id_talla = $3 AND stock >= $1`,
+                [item.cantidad, item.id_producto, item.id_talla]
+            );
+
+            if (rowCount === 0) {
+                throw new Error(
+                    `Stock insuficiente para el producto ${item.id_producto} en talla ${item.id_talla}.`
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        return pedido;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
 };
 
 
@@ -51,21 +103,111 @@ const findPedidosByUsuario = async (idUsuario) => {
 
 
 /**
- * Obtiene un pedido específico por su ID.
- * Incluye verificación de que el pedido pertenezca al usuario
- * que lo solicita, para evitar que un cliente vea pedidos ajenos.
+ * Obtiene un pedido específico por su ID verificando que pertenezca
+ * al cliente autenticado. Incluye el detalle de productos (detalle_pedidos)
+ * para que el cliente pueda ver qué artículos conforman su pedido.
  *
  * @param {number} idPedido  - ID del pedido a buscar
  * @param {number} idUsuario - ID del cliente autenticado (verificación de pertenencia)
- * @returns {Object|null} El pedido encontrado, o null si no existe o no pertenece al usuario
+ * @returns {Object|null} El pedido con su detalle, o null si no existe / no pertenece
  */
 const findPedidoByIdAndUsuario = async (idPedido, idUsuario) => {
     const { rows } = await pool.query(
-        `SELECT id_pedido, id_usuario, fecha_pedido, estado, total,
-                comentarios_cliente, comentarios_vendedor
-         FROM pedidos
-         WHERE id_pedido = $1 AND id_usuario = $2`,
+        `SELECT
+           p.id_pedido, p.id_usuario, p.fecha_pedido, p.estado, p.total,
+           p.comentarios_cliente, p.comentarios_vendedor,
+           json_build_object(
+             'id_direccion',    d.id_direccion,
+             'calle',           d.calle,
+             'numero_exterior', d.numero_exterior,
+             'numero_interior', d.numero_interior,
+             'colonia',         d.colonia,
+             'ciudad',          d.ciudad,
+             'estado',          d.estado,
+             'codigo_postal',   d.codigo_postal,
+             'pais',            d.pais,
+             'referencias',     d.referencias
+           ) AS direccion,
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'id_producto',    dp.id_producto,
+                 'nombre_producto', pr.nombre,
+                 'id_talla',       dp.id_talla,
+                 'nombre_talla',   t.nombre,
+                 'cantidad',       dp.cantidad,
+                 'total',          dp.total,
+                 'imagen_url',     img.url_imagen
+               ) ORDER BY dp.id_producto
+             ) FILTER (WHERE dp.id_pedido IS NOT NULL),
+             '[]'
+           ) AS detalle_pedidos
+         FROM pedidos p
+         LEFT JOIN direcciones     d  ON d.id_direccion = p.id_direccion
+         LEFT JOIN detalle_pedidos dp ON dp.id_pedido   = p.id_pedido
+         LEFT JOIN productos       pr ON pr.id_producto = dp.id_producto
+         LEFT JOIN tallas          t  ON t.id_talla     = dp.id_talla
+         LEFT JOIN imagen_producto img ON img.id_producto = dp.id_producto
+                                     AND img.orden = 1
+         WHERE p.id_pedido = $1 AND p.id_usuario = $2
+         GROUP BY p.id_pedido, d.id_direccion`,
         [idPedido, idUsuario]
+    );
+    return rows[0] || null;
+};
+
+
+/**
+ * Obtiene un pedido específico por su ID sin restricción de usuario.
+ * Usado por Vendedor y Admin para consultar el detalle de cualquier pedido.
+ * Incluye el nombre y email del cliente, y el detalle de productos.
+ *
+ * @param {number} idPedido - ID del pedido a buscar
+ * @returns {Object|null} El pedido con su detalle, o null si no existe
+ */
+const findPedidoById = async (idPedido) => {
+    const { rows } = await pool.query(
+        `SELECT
+           p.id_pedido, p.id_usuario, p.fecha_pedido, p.estado, p.total,
+           p.comentarios_cliente, p.comentarios_vendedor,
+           u.nombre AS nombre_cliente, u.email AS email_cliente,
+           json_build_object(
+             'id_direccion',    d.id_direccion,
+             'calle',           d.calle,
+             'numero_exterior', d.numero_exterior,
+             'numero_interior', d.numero_interior,
+             'colonia',         d.colonia,
+             'ciudad',          d.ciudad,
+             'estado',          d.estado,
+             'codigo_postal',   d.codigo_postal,
+             'pais',            d.pais,
+             'referencias',     d.referencias
+           ) AS direccion,
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'id_producto',    dp.id_producto,
+                 'nombre_producto', pr.nombre,
+                 'id_talla',       dp.id_talla,
+                 'nombre_talla',   t.nombre,
+                 'cantidad',       dp.cantidad,
+                 'total',          dp.total,
+                 'imagen_url',     img.url_imagen
+               ) ORDER BY dp.id_producto
+             ) FILTER (WHERE dp.id_pedido IS NOT NULL),
+             '[]'
+           ) AS detalle_pedidos
+         FROM pedidos p
+         JOIN usuarios u ON u.id_usuario = p.id_usuario
+         LEFT JOIN direcciones     d  ON d.id_direccion = p.id_direccion
+         LEFT JOIN detalle_pedidos dp ON dp.id_pedido   = p.id_pedido
+         LEFT JOIN productos       pr ON pr.id_producto = dp.id_producto
+         LEFT JOIN tallas          t  ON t.id_talla     = dp.id_talla
+         LEFT JOIN imagen_producto img ON img.id_producto = dp.id_producto
+                                     AND img.orden = 1
+         WHERE p.id_pedido = $1
+         GROUP BY p.id_pedido, u.nombre, u.email, d.id_direccion`,
+        [idPedido]
     );
     return rows[0] || null;
 };
@@ -126,22 +268,58 @@ const updateEstadoPedido = async (idPedido, nuevoEstado, comentarios) => {
  * ya que una vez que entra al flujo de pago no se puede cancelar
  * directamente desde el cliente.
  *
+ * Al cancelar, se devuelve el stock de cada ítem del detalle_pedidos
+ * a productos_tallas dentro de la misma transacción.
+ *
  * @param {number} idPedido  - ID del pedido a cancelar
  * @param {number} idUsuario - ID del cliente (verifica que sea su propio pedido)
  * @returns {Object|null} El pedido cancelado, o null si no se encontró o no era cancelable
  */
 const cancelarPedido = async (idPedido, idUsuario) => {
-    const { rows } = await pool.query(
-        `UPDATE pedidos
-         SET estado = 'cancelado'
-         WHERE id_pedido = $1
-           AND id_usuario = $2
-           AND estado = 'pendiente'
-         RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
-                   comentarios_cliente, comentarios_vendedor`,
-        [idPedido, idUsuario]
-    );
-    return rows[0] || null;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Cancelar el pedido (solo si pertenece al usuario y está en 'pendiente')
+        const { rows } = await client.query(
+            `UPDATE pedidos
+             SET estado = 'cancelado'
+             WHERE id_pedido = $1
+               AND id_usuario = $2
+               AND estado = 'pendiente'
+             RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
+                       comentarios_cliente, comentarios_vendedor`,
+            [idPedido, idUsuario]
+        );
+        const pedido = rows[0] || null;
+
+        // 2. Si se canceló, restaurar el stock de cada ítem
+        if (pedido) {
+            const { rows: detalle } = await client.query(
+                `SELECT id_producto, id_talla, cantidad
+                 FROM detalle_pedidos
+                 WHERE id_pedido = $1`,
+                [idPedido]
+            );
+
+            for (const item of detalle) {
+                await client.query(
+                    `UPDATE productos_tallas
+                     SET stock = stock + $1
+                     WHERE id_producto = $2 AND id_talla = $3`,
+                    [item.cantidad, item.id_producto, item.id_talla]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        return pedido;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
 };
 
 
@@ -193,13 +371,41 @@ const iniciarPagoPedido = async (idPedido, idUsuario) => {
 };
 
 
+/**
+ * Obtiene los 5 productos con mayor cantidad total vendida en detalle_pedidos.
+ * Agrega la cantidad de todas las tallas y pedidos por producto.
+ * Incluye la imagen principal (orden = 1) si existe.
+ *
+ * @returns {Array} Lista de hasta 5 productos con id_producto, nombre, imagen_url y total_vendido
+ */
+const findTopProductos = async () => {
+    const { rows } = await pool.query(
+        `SELECT
+           dp.id_producto,
+           pr.nombre,
+           img.url_imagen AS imagen_url,
+           SUM(dp.cantidad) AS total_vendido
+         FROM detalle_pedidos dp
+         JOIN productos pr ON pr.id_producto = dp.id_producto
+         LEFT JOIN imagen_producto img
+           ON img.id_producto = dp.id_producto AND img.orden = 1
+         GROUP BY dp.id_producto, pr.nombre, img.url_imagen
+         ORDER BY total_vendido DESC
+         LIMIT 5`
+    );
+    return rows;
+};
+
+
 module.exports = {
     createPedido,
     findPedidosByUsuario,
     findPedidoByIdAndUsuario,
+    findPedidoById,
     findAllPedidos,
     updateEstadoPedido,
     updateComentarioVendedor,
     cancelarPedido,
     iniciarPagoPedido,
+    findTopProductos,
 };

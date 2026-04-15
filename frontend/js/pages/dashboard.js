@@ -26,15 +26,16 @@ function renderDashboard() {
       <p>Cargando dashboard...</p>
     </div>`;
 
-  Api.getPedidos()
-    .then(data => {
-      AppState.setPedidos(data);
-      renderDashboardContent();
-    })
-    .catch(() => {
-      // Si la API falla mostrar lo que haya en el estado local
-      renderDashboardContent();
-    });
+  Promise.all([
+    Api.getPedidos(),
+    Api.getTopProductos().catch(() => []),
+  ]).then(([pedidos, topProductos]) => {
+    AppState.setPedidos(pedidos);
+    renderDashboardContent(topProductos);
+  }).catch(() => {
+    // Si la API falla mostrar lo que haya en el estado local
+    renderDashboardContent([]);
+  });
 }
 
 
@@ -43,7 +44,7 @@ function renderDashboard() {
  * almacenados en AppState (ya cargados desde la API).
  * Calcula métricas, arma las secciones y dibuja la tabla de pedidos activos.
  */
-function renderDashboardContent() {
+function renderDashboardContent(topProductos = []) {
   const root = document.getElementById('app-root');
   const pedidos = AppState.pedidos;
 
@@ -85,15 +86,36 @@ function renderDashboardContent() {
   // ── HTML de secciones ────────────────────────────────────────
 
   /**
-   * Sección "Top 5 productos": depende de detalle_pedidos que pertenece
-   * a otro módulo. Se muestra un placeholder hasta que esté disponible.
+   * Sección "Top 5 productos": muestra los productos con mayor cantidad vendida
+   * obtenidos desde /api/pedidos/top-productos.
    */
-  const topHtml = `
-    <div style="display:flex;flex-direction:column;align-items:center;
-                justify-content:center;padding:40px 0;gap:10px;color:var(--muted-fg);">
-      ${Icons.Package(32)}
-      <p style="font-size:13px;">Disponible cuando el módulo de productos esté integrado</p>
-    </div>`;
+  const topHtml = topProductos.length === 0
+    ? `<div style="display:flex;flex-direction:column;align-items:center;
+                   justify-content:center;padding:40px 0;gap:10px;color:var(--muted-fg);">
+         ${Icons.Package(32)}
+         <p style="font-size:13px;">Sin datos de ventas aún</p>
+       </div>`
+    : topProductos.map((prod, i) => {
+        const imgHtml = prod.imagen_url
+          ? `<img src="${prod.imagen_url}" alt="${prod.nombre}"
+                  style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">`
+          : `<div style="width:40px;height:40px;border-radius:6px;background:var(--border);
+                         display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+               ${Icons.Package(18)}
+             </div>`;
+        return `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;
+                      border-bottom:1px solid var(--border);">
+            <span style="font-size:13px;font-weight:700;color:var(--muted-fg);
+                         min-width:18px;text-align:center;">${i + 1}</span>
+            ${imgHtml}
+            <span style="flex:1;font-size:14px;overflow:hidden;
+                         text-overflow:ellipsis;white-space:nowrap;">${prod.nombre}</span>
+            <span style="font-size:13px;font-weight:600;color:var(--accent);white-space:nowrap;">
+              ${prod.total_vendido} uds.
+            </span>
+          </div>`;
+      }).join('');
 
   /**
    * Sección de pedidos esperando confirmación de pago.
@@ -302,6 +324,16 @@ function renderFilasPedidos(pedidos) {
 
   tbody.innerHTML = html;
 
+  // Reasignar eventos al botón de ver detalle
+  tbody.querySelectorAll('.btn-ver-detalle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pedido = AppState.pedidos.find(p =>
+        String(p.id_pedido ?? p.id) === String(btn.dataset.id)
+      );
+      if (pedido) abrirDetallePedidoVendedor(pedido);
+    });
+  });
+
   // Reasignar eventos a los botones de cambiar estado recién renderizados
   tbody.querySelectorAll('.btn-cambiar-estado').forEach(btn => {
     btn.addEventListener('click', () =>
@@ -341,6 +373,11 @@ function buildFila(p) {
       <td>${getStatusBadge(p.estado)}</td>
       <td>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm btn-ver-detalle"
+                  data-id="${idMostrar}"
+                  title="Ver detalle completo">
+            ${Icons.Eye(14)}
+          </button>
           <button class="btn btn-outline btn-sm btn-cambiar-estado"
                   data-id="${idMostrar}"
                   data-estado="${p.estado}">
@@ -586,6 +623,218 @@ function abrirModalComentario(idPedido, comentarioActual) {
         btnGuardar.textContent = 'Guardar nota';
       });
   });
+}
+
+
+/**
+ * Abre un modal con el detalle completo de un pedido para el vendedor/admin.
+ * Muestra cliente, fecha, estado, productos, dirección y comentarios.
+ * Permite cambiar el estado, confirmar el pago directamente (si está
+ * en esperando_pago) y editar la nota interna del vendedor.
+ *
+ * @param {Object} pedido - Objeto pedido del AppState
+ */
+function abrirDetallePedidoVendedor(pedido) {
+  const idMostrar    = pedido.id_pedido ?? pedido.id;
+  const fechaMostrar = pedido.fecha_pedido ?? pedido.fecha_creacion;
+  const cliente      = pedido.nombre_cliente ?? pedido.direccion?.nombre_completo ?? '—';
+
+  // ── Dirección ────────────────────────────────────────────────
+  const buildDireccionHtml = dir => {
+    if (!dir || !dir.calle) {
+      return `<p style="color:var(--muted-fg);font-size:13px;">No disponible</p>`;
+    }
+    const linea1 = `${dir.calle}${dir.numero_exterior ? ` #${dir.numero_exterior}` : ''}${dir.numero_interior ? ` Int. ${dir.numero_interior}` : ''}`;
+    return `
+      <div style="background:rgba(42,42,42,.4);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;">
+        <p>${linea1}</p>
+        ${dir.colonia     ? `<p>${dir.colonia}</p>` : ''}
+        <p>${dir.ciudad}, ${dir.estado}${dir.codigo_postal ? ` CP ${dir.codigo_postal}` : ''}</p>
+        ${dir.pais        ? `<p style="color:var(--muted-fg);">${dir.pais}</p>` : ''}
+        ${dir.referencias ? `<p style="color:var(--muted-fg);margin-top:4px;">${dir.referencias}</p>` : ''}
+      </div>`;
+  };
+
+  // ── Productos ────────────────────────────────────────────────
+  const buildItemsHtml = items => {
+    if (!items || items.length === 0) {
+      return `<div style="display:flex;align-items:center;gap:10px;padding:12px 0;color:var(--muted-fg);">
+        ${Icons.Package(18)}
+        <p style="font-size:13px;">Detalle de productos no disponible</p>
+      </div>`;
+    }
+    return items.map(item => {
+      const nombre   = item.nombre   || item.nombre_producto || '';
+      const talla    = item.talla    || item.nombre_talla    || '';
+      const cantidad = item.cantidad ?? 1;
+      const subtotal = item.subtotal ?? item.total ?? (item.precio_unitario ? Number(item.precio_unitario) * cantidad : null);
+      const imgUrl   = item.imagenUrl || item.imagen_url || null;
+      return `
+        <div class="order-item">
+          <div class="order-item-img">
+            ${imgUrl ? `<img src="${imgUrl}" alt="${nombre}" />` : ''}
+          </div>
+          <div class="order-item-info">
+            <p class="order-item-name">${nombre}</p>
+            <p class="order-item-meta">Talla: ${talla} · Cantidad: ${cantidad}</p>
+          </div>
+          ${subtotal != null
+            ? `<p style="color:var(--primary);font-size:13px;white-space:nowrap;flex-shrink:0;">
+                 $${formatCurrency(subtotal)} MXN
+               </p>`
+            : ''}
+        </div>`;
+    }).join('');
+  };
+
+  const itemsIniciales  = pedido.items || pedido.detalles || [];
+  const esEstadoFinal   = pedido.estado === 'entregado' || pedido.estado === 'cancelado';
+  const puedeConfirmarPago = pedido.estado === 'esperando_pago';
+
+  // ── Modal ────────────────────────────────────────────────────
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:680px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;">Pedido #${idMostrar}</h3>
+          ${getStatusBadge(pedido.estado)}
+        </div>
+        <button class="modal-close" id="btn-x-detalle-vend">${Icons.X(20)}</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <!-- Resumen -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:20px;
+                    padding-bottom:20px;margin-bottom:24px;border-bottom:1px solid var(--border);">
+          <div>
+            <p class="form-label" style="margin-bottom:4px;">Fecha</p>
+            <p style="font-size:14px;">${formatDate(fechaMostrar)}</p>
+          </div>
+          <div>
+            <p class="form-label" style="margin-bottom:4px;">Total</p>
+            <p class="total-amount" style="font-size:18px;">$${formatCurrency(pedido.total)} MXN</p>
+          </div>
+          <div>
+            <p class="form-label" style="margin-bottom:4px;">Cliente</p>
+            <p style="font-size:14px;font-weight:500;">${cliente}</p>
+            ${pedido.email_cliente
+              ? `<p style="font-size:12px;color:var(--muted-fg);">${pedido.email_cliente}</p>`
+              : ''}
+          </div>
+        </div>
+
+        <!-- Productos -->
+        <div class="order-items">
+          <p class="order-section-title">${Icons.Package(16)} Productos</p>
+          <div id="detalle-vend-items">${buildItemsHtml(itemsIniciales)}</div>
+        </div>
+
+        <!-- Dirección -->
+        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
+          <p class="order-section-title">${Icons.MapPin(16)} Dirección de entrega</p>
+          <div id="detalle-vend-dir">${buildDireccionHtml(pedido.direccion)}</div>
+        </div>
+
+        <!-- Comentarios -->
+        ${pedido.comentarios_cliente ? `
+          <div class="order-comments">
+            <p class="form-label">Comentario del cliente</p>
+            <p class="form-hint">${pedido.comentarios_cliente}</p>
+          </div>` : ''}
+        ${pedido.comentarios_vendedor ? `
+          <div class="order-comments">
+            <p class="form-label">Nota interna</p>
+            <p class="form-hint" style="color:var(--primary);">${pedido.comentarios_vendedor}</p>
+          </div>` : ''}
+      </div>
+
+      <!-- Acciones vendedor -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+                  padding:16px 24px;border-top:1px solid var(--border);">
+        ${!esEstadoFinal ? `
+          <button class="btn btn-primary" id="btn-detalle-vend-estado">
+            Cambiar estado
+          </button>` : ''}
+        ${puedeConfirmarPago ? `
+          <button class="btn btn-outline" id="btn-detalle-vend-pago"
+                  style="border-color:var(--green);color:var(--green);">
+            ${Icons.FileCheck(14)} Confirmar pago
+          </button>` : ''}
+        <button class="btn btn-outline" id="btn-detalle-vend-nota">
+          ${Icons.Pencil(14)} ${pedido.comentarios_vendedor ? 'Editar nota' : 'Agregar nota'}
+        </button>
+        <button class="btn btn-outline" id="btn-cerrar-detalle-vend" style="margin-left:auto;">
+          Cerrar
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  const cerrar = () => overlay.remove();
+  document.getElementById('btn-x-detalle-vend').addEventListener('click', cerrar);
+  document.getElementById('btn-cerrar-detalle-vend').addEventListener('click', cerrar);
+  overlay.addEventListener('click', e => { if (e.target === overlay) cerrar(); });
+
+  // Cambiar estado → cierra detalle y abre el modal de transición
+  document.getElementById('btn-detalle-vend-estado')?.addEventListener('click', () => {
+    cerrar();
+    abrirCambioEstado(idMostrar, pedido.estado);
+  });
+
+  // Confirmar pago directamente (esperando_pago → pagado)
+  document.getElementById('btn-detalle-vend-pago')?.addEventListener('click', () => {
+    const btn = document.getElementById('btn-detalle-vend-pago');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    Api.actualizarEstadoPedido(idMostrar, {
+      estado: 'pagado',
+      estado_actual: 'esperando_pago',
+      comentarios_vendedor: null
+    })
+      .then(() => {
+        cerrar();
+        showToast('Pago confirmado. Estado actualizado a "Pagado".', 'success');
+        return Api.getPedidos();
+      })
+      .then(data => {
+        AppState.setPedidos(data);
+        renderDashboardContent();
+      })
+      .catch(err => {
+        showToast(err.message || 'Error al confirmar el pago.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = `${Icons.FileCheck(14)} Confirmar pago`;
+      });
+  });
+
+  // Agregar / editar nota → cierra detalle y abre el modal de comentario
+  document.getElementById('btn-detalle-vend-nota').addEventListener('click', () => {
+    cerrar();
+    abrirModalComentario(idMostrar, pedido.comentarios_vendedor || '');
+  });
+
+  // Cargar el detalle completo desde la API: productos y dirección
+  if (!isNaN(Number(idMostrar))) {
+    Api.getPedidoById(Number(idMostrar))
+      .then(data => {
+        const items = data.items || data.detalles || data.detalle_pedidos || [];
+        if (items.length > 0) {
+          const container = document.getElementById('detalle-vend-items');
+          if (container) container.innerHTML = buildItemsHtml(items);
+        }
+        if (data.direccion) {
+          const dirContainer = document.getElementById('detalle-vend-dir');
+          if (dirContainer) dirContainer.innerHTML = buildDireccionHtml(data.direccion);
+        }
+      })
+      .catch(() => {});
+  }
 }
 
 

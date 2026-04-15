@@ -582,7 +582,8 @@ input::-webkit-contacts-auto-fill-button { display: none !important; }
 
 /* ===== ORDERS ===== */
 .orders-layout { padding-top: 48px; }
-.order-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+.order-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 24px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+.order-card:hover { border-color: rgba(212,175,55,0.45); box-shadow: 0 0 0 1px rgba(212,175,55,0.15); }
 .order-header {
   background: rgba(42,42,42,0.2);
   padding: 14px 24px;
@@ -711,6 +712,7 @@ input::-webkit-contacts-auto-fill-button { display: none !important; }
 }
 .toggle-switch.on .toggle-knob { transform: translateX(20px); }
 .toggle-switch.off .toggle-knob { transform: translateX(0); }
+.toggle-switch.toggle-disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; color: var(--muted-fg); }
 .admin-stats { display: flex; gap: 24px; }
 

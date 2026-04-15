@@ -1,4 +1,4 @@
-const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, iniciarPagoPedido } = require('../models/pedido.model');
+const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, iniciarPagoPedido, findTopProductos } = require('../models/pedido.model');
 
 // ─────────────────────────────────────────────────────────────
 //  CONTROLLER DE PEDIDOS
@@ -20,12 +20,15 @@ const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findAllPed
  * Responde con 201 y el pedido creado, o 500 si ocurre un error inesperado.
  */
 const crearPedido = async (req, res) => {
-    const { total, comentarios } = req.body;
+    const { total, id_direccion, comentarios } = req.body;
     try {
         const idUsuario = req.usuario.id_usuario;
-        const nuevoPedido = await createPedido(idUsuario, total, comentarios);
+        const nuevoPedido = await createPedido(idUsuario, total, id_direccion, comentarios);
         res.status(201).json(nuevoPedido);
     } catch (error) {
+        if (error.message && error.message.startsWith('Stock insuficiente')) {
+            return res.status(409).json({ message: error.message });
+        }
         res.status(500).json({ message: 'Error al crear el pedido.', error: error.message });
     }
 };
@@ -75,8 +78,16 @@ const getPedidos = async (req, res) => {
 const getPedidoById = async (req, res) => {
     try {
         const { id } = req.params;
-        const idUsuario = req.usuario.id_usuario;
-        const pedido = await findPedidoByIdAndUsuario(id, idUsuario);
+        const { id_usuario, rol } = req.usuario;
+
+        // CLIENTE solo puede ver sus propios pedidos.
+        // VENDEDOR y ADMIN pueden ver cualquier pedido.
+        let pedido;
+        if (rol === 'CLIENTE') {
+            pedido = await findPedidoByIdAndUsuario(id, id_usuario);
+        } else {
+            pedido = await findPedidoById(id);
+        }
 
         if (!pedido) {
             return res.status(404).json({ message: 'Pedido no encontrado.' });
@@ -215,6 +226,23 @@ const agregarComentario = async (req, res) => {
 };
 
 
+/**
+ * GET /api/pedidos/top-productos
+ * Devuelve los 5 productos con mayor cantidad total vendida en detalle_pedidos.
+ * Solo accesible para Vendedor y Admin (usado en el dashboard).
+ *
+ * Responde con 200 y el arreglo de productos, o 500 si ocurre un error inesperado.
+ */
+const getTopProductos = async (req, res) => {
+    try {
+        const top = await findTopProductos();
+        res.json(top);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener el top de productos.', error: error.message });
+    }
+};
+
+
 module.exports = {
     crearPedido,
     getPedidos,
@@ -223,4 +251,5 @@ module.exports = {
     cancelarPedidoPropio,
     iniciarPago,
     agregarComentario,
+    getTopProductos,
 };

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, iniciarPago, agregarComentario } = require('../controllers/pedido.controller');
+const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, iniciarPago, agregarComentario, getTopProductos } = require('../controllers/pedido.controller');
 
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
 const { validarCrearPedido, validarActualizarEstado, validarComentario } = require('../middlewares/pedido.middleware');
@@ -32,10 +32,17 @@ router.post( '/', verificarToken, verificarRol('CLIENTE'), validarCrearPedido, c
 router.get( '/', verificarToken, verificarRol('CLIENTE', 'VENDEDOR', 'ADMIN'), getPedidos );
 
 
+// GET /api/pedidos/top-productos
+// Devuelve los 5 productos con mayor cantidad total vendida en detalle_pedidos.
+// Solo Vendedor y Admin tienen acceso (usado en el dashboard).
+// IMPORTANTE: debe declararse antes de /:id para que Express no lo trate como parámetro.
+router.get( '/top-productos', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), getTopProductos );
+
+
 // GET /api/pedidos/:id
-// Obtiene el detalle de un pedido específico.
-// Solo el Cliente dueño del pedido puede consultarlo.
-router.get( '/:id', verificarToken, verificarRol('CLIENTE'), getPedidoById );
+// Obtiene el detalle completo de un pedido (incluye detalle_pedidos).
+// CLIENTE → solo su propio pedido. VENDEDOR / ADMIN → cualquier pedido.
+router.get( '/:id', verificarToken, verificarRol('CLIENTE', 'VENDEDOR', 'ADMIN'), getPedidoById );
 
 
 // PATCH /api/pedidos/:id/estado

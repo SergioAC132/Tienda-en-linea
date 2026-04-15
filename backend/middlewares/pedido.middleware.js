@@ -26,13 +26,14 @@ const TRANSICIONES_VALIDAS = {
  * Campos esperados en req.body:
  *   - total        {number}  Requerido. Total calculado desde el carrito en el frontend.
  *                            Debe ser un número mayor a cero.
+ *   - id_direccion {number}  Requerido. ID de la dirección de entrega seleccionada.
  *   - comentarios  {string}  Opcional. Máximo 100 caracteres (límite de la BD).
  *
  * Si la validación pasa, deja pasar la solicitud al controller.
  * Si falla, responde con 400 y un arreglo de errores.
  */
 const validarCrearPedido = (req, res, next) => {
-    const { total, comentarios } = req.body;
+    const { total, id_direccion, comentarios } = req.body;
     const errores = [];
 
     // ── total ────────────────────────────────────────────────
@@ -45,13 +46,22 @@ const validarCrearPedido = (req, res, next) => {
         }
     }
 
+    // ── id_direccion ─────────────────────────────────────────
+    if (id_direccion === undefined || id_direccion === null || id_direccion === '') {
+        errores.push('El campo id_direccion es requerido.');
+    } else {
+        const idNum = Number(id_direccion);
+        if (!Number.isInteger(idNum) || idNum <= 0) {
+            errores.push('El id_direccion debe ser un entero positivo.');
+        }
+    }
+
     // ── comentarios (opcional) ───────────────────────────────
     if (comentarios !== undefined && comentarios !== null) {
         const comentarioLimpio = comentarios.toString().trim();
         if (comentarioLimpio.length > 100) {
             errores.push('Los comentarios no pueden superar los 100 caracteres.');
         }
-        // Escribir el valor limpio de vuelta para que el controller lo use
         req.body.comentarios = comentarioLimpio || null;
     }
 
@@ -59,8 +69,9 @@ const validarCrearPedido = (req, res, next) => {
         return res.status(400).json({ errores });
     }
 
-    // Normalizar el total como número antes de pasarlo al controller
-    req.body.total = Number(total);
+    // Normalizar antes de pasar al controller
+    req.body.total        = Number(total);
+    req.body.id_direccion = Number(id_direccion);
 
     next();
 };

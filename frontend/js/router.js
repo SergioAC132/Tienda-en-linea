@@ -10,7 +10,7 @@ const Router = {
     'pago': (id) => renderPago(id),
     'pedidos': () => renderPedidos(),
     'dashboard': () => renderDashboard(),
-    'admin': () => renderAdmin(),
+    'admin': () => initAdmin(),
     'catalogo-vendedor': () => renderCatalogoVendedor(),
   },
 

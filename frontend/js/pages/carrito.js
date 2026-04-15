@@ -172,7 +172,7 @@ function renderCarrito() {
     // Registrar el pedido en la base de datos.
     // El total se calcula desde el carrito del localStorage, independientemente
     // de si los productos son reales o de prueba — la API solo necesita el total.
-    Api.crearPedido({ total, comentarios })
+    Api.crearPedido({ total, id_direccion: Number(dirId), comentarios })
       .then(apiResp => {
         // Vaciar carrito en BD (fire-and-forget; el pedido ya está creado)
         Api.vaciarCarrito().catch(() => {});

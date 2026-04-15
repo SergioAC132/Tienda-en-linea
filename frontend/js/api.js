@@ -125,6 +125,18 @@ const Api = {
   // ─── Pedidos ─────────────────────────────────────────────
 
   /**
+   * GET /api/pedidos/top-productos
+   * Devuelve los 5 productos con mayor cantidad total vendida.
+   * Solo accesible para VENDEDOR y ADMIN.
+   *
+   * @returns {Array} Lista de { id_producto, nombre, imagen_url, total_vendido }
+   */
+  async getTopProductos() {
+    return await this._req('/pedidos/top-productos');
+  },
+
+
+  /**
    * Obtiene pedidos según el rol del usuario autenticado.
    * - CLIENTE   → devuelve solo sus propios pedidos
    * - VENDEDOR / ADMIN → devuelve todos los pedidos del sistema
@@ -410,5 +422,29 @@ const Api = {
 
   async deleteTalla(id) {
     return await this._req(`/tallas/${id}`, { method: 'DELETE' });
-  }
+  },
+
+  // ─── Admin: gestión de usuarios ──────────────────────────────
+
+  /* GET /api/admin/usuarios — devuelve todos los usuarios normalizados */
+  async getUsuarios() {
+    const data = await this._req('/admin/usuarios');
+    return data.map(u => ({
+      id:             String(u.id_usuario),
+      nombre:         u.nombre,
+      correo:         u.email,
+      rol:            u.rol,
+      estado:         u.activo ? 'activo' : 'inactivo',
+      fecha_creacion: u.fecha_creacion,
+    }));
+  },
+
+  /* PATCH /api/admin/usuarios/:id/estado — activa o desactiva un usuario */
+  async toggleEstadoUsuario(id) {
+    const data = await this._req(`/admin/usuarios/${id}/estado`, { method: 'PATCH' });
+    return {
+      id:     String(data.id_usuario),
+      estado: data.activo ? 'activo' : 'inactivo',
+    };
+  },
 }
