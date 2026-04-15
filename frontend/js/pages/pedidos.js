@@ -1,5 +1,9 @@
 // ===== MIS PEDIDOS PAGE =====
 
+// Filtro activo en la lista de pedidos del cliente.
+// Se conserva entre re-renders para no perder la selección.
+let _filtroEstadoCliente = '';
+
 /**
  * Punto de entrada de la página.
  * Verifica autenticación, muestra un loader mientras carga,
@@ -48,22 +52,69 @@ function renderPedidosList() {
     return;
   }
 
-  const pedidosHtml = misPedidos.map(pedido => renderTarjetaPedido(pedido)).join('');
-
   root.innerHTML = `
     <div class="orders-layout">
-      <h2 class="page-title">Mis Pedidos</h2>
-      <div style="margin-top:32px;">${pedidosHtml}</div>
+      <div class="page-header">
+        <h2 class="page-title">Mis Pedidos</h2>
+        <select id="filtro-estado-cliente" style="width:auto;min-width:180px;">
+          <option value="">Todos los pedidos</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="esperando_pago">Esperando pago</option>
+          <option value="pagado">Pagado</option>
+          <option value="entregado">Entregado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div id="lista-pedidos"></div>
     </div>`;
 
-  // Asignar eventos a los botones de cancelar
-  document.querySelectorAll('.btn-cancelar-pedido').forEach(btn => {
+  // Restaurar filtro previo si existía
+  const selEstado = document.getElementById('filtro-estado-cliente');
+  if (selEstado) selEstado.value = _filtroEstadoCliente;
+
+  // Renderizar tarjetas con el filtro actual
+  renderCards(misPedidos);
+
+  // Actualizar tarjetas al cambiar el filtro
+  selEstado?.addEventListener('change', () => {
+    _filtroEstadoCliente = selEstado.value;
+    const filtrados = _filtroEstadoCliente
+      ? misPedidos.filter(p => p.estado === _filtroEstadoCliente)
+      : misPedidos;
+    renderCards(filtrados);
+  });
+}
+
+
+/**
+ * Renderiza las tarjetas de pedidos en el contenedor #lista-pedidos
+ * y reasigna los eventos de los botones de acción.
+ * Se llama al cargar la página y al cambiar el filtro de estado.
+ *
+ * @param {Array} pedidos - Lista de pedidos ya filtrada a mostrar
+ */
+function renderCards(pedidos) {
+  const contenedor = document.getElementById('lista-pedidos');
+  if (!contenedor) return;
+
+  if (pedidos.length === 0) {
+    contenedor.innerHTML = `
+      <div class="empty-state" style="padding-top:48px;">
+        ${Icons.Package(48)}
+        <p>No hay pedidos que coincidan con el filtro seleccionado</p>
+      </div>`;
+    return;
+  }
+
+  contenedor.innerHTML = pedidos.map(p => renderTarjetaPedido(p)).join('');
+
+  // Reasignar eventos a los botones de cancelar
+  contenedor.querySelectorAll('.btn-cancelar-pedido').forEach(btn => {
     btn.addEventListener('click', () => cancelarPedido(btn.dataset.id));
   });
 
-  // Asignar eventos a los botones de registrar pago
-  // Navega a pago.js pasando el id del pedido como parámetro en la URL
-  document.querySelectorAll('.btn-registrar-pago').forEach(btn => {
+  // Reasignar eventos a los botones de registrar pago
+  contenedor.querySelectorAll('.btn-registrar-pago').forEach(btn => {
     btn.addEventListener('click', () => Nav.go(Nav.pago(btn.dataset.id)));
   });
 }
