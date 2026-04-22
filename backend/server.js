@@ -9,6 +9,7 @@ const pedidoRoutes = require('./routes/pedido.routes');
 const carritoRoutes = require('./routes/carrito.routes');
 const productoRoutes = require('./routes/productoRoutes');
 const adminRoutes = require('./routes/admin.routes');
+const pagoRoutes  = require('./routes/pago.routes');
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/api/direcciones', direccionRoutes);
 app.use('/api/pedidos', pedidoRoutes);
 app.use('/api/carrito', carritoRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/pagos', pagoRoutes);
 app.use('/api', productoRoutes);
 
 // ------ Archivos subidos (imágenes) ------

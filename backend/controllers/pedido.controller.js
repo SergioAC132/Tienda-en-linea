@@ -1,4 +1,4 @@
-const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, iniciarPagoPedido, findTopProductos } = require('../models/pedido.model');
+const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, findTopProductos } = require('../models/pedido.model');
 
 // ─────────────────────────────────────────────────────────────
 //  CONTROLLER DE PEDIDOS
@@ -164,38 +164,6 @@ const cancelarPedidoPropio = async (req, res) => {
 
 
 /**
- * PATCH /api/pedidos/:id/pagar
- * Avanza el estado del pedido de 'pendiente' a 'esperando_pago'.
- * Se llama desde pago.js cuando el cliente registra su intención de pago.
- * Solo el cliente dueño del pedido puede usarlo, y únicamente si el pedido
- * sigue en estado 'pendiente' — el modelo rechaza cualquier otro caso.
- *
- * Params:
- *   - id  {number}  ID del pedido a actualizar
- *
- * No requiere body. El id_usuario se obtiene del token JWT.
- * Responde con 200 y el pedido actualizado, 404 si no aplica, o 500 si hay error.
- */
-const iniciarPago = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const idUsuario = req.usuario.id_usuario;
-        const pedidoActualizado = await iniciarPagoPedido(id, idUsuario);
-
-        if (!pedidoActualizado) {
-            return res.status(404).json({
-                message: 'Pedido no encontrado, no te pertenece, o ya no está en estado pendiente.'
-            });
-        }
-
-        res.json(pedidoActualizado);
-    } catch (error) {
-        res.status(500).json({ message: 'Error al iniciar el pago del pedido.', error: error.message });
-    }
-};
-
-
-/**
  * PATCH /api/pedidos/:id/comentario
  * Agrega o edita el comentario interno del vendedor en un pedido.
  * No modifica el estado ni ningún otro campo — solo comentarios_vendedor.
@@ -249,7 +217,6 @@ module.exports = {
     getPedidoById,
     actualizarEstado,
     cancelarPedidoPropio,
-    iniciarPago,
     agregarComentario,
     getTopProductos,
 };

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, iniciarPago, agregarComentario, getTopProductos } = require('../controllers/pedido.controller');
+const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, agregarComentario, getTopProductos } = require('../controllers/pedido.controller');
 
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
 const { validarCrearPedido, validarActualizarEstado, validarComentario } = require('../middlewares/pedido.middleware');
@@ -55,13 +55,6 @@ router.patch( '/:id/estado', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), 
 // Cancela un pedido propio. Solo el Cliente puede cancelar sus pedidos.
 // El modelo solo permite cancelar si el estado es 'pendiente'.
 router.patch( '/:id/cancelar', verificarToken, verificarRol('CLIENTE'), cancelarPedidoPropio );
-
-
-// PATCH /api/pedidos/:id/pagar
-// Avanza el estado del pedido de 'pendiente' a 'esperando_pago'.
-// Se llama desde pago.js cuando el cliente registra su intención de pago.
-// No requiere body — el id_usuario se obtiene del token JWT.
-router.patch( '/:id/pagar', verificarToken, verificarRol('CLIENTE'), iniciarPago );
 
 
 // PATCH /api/pedidos/:id/comentario

@@ -639,6 +639,40 @@ function abrirDetallePedidoVendedor(pedido) {
   const fechaMostrar = pedido.fecha_pedido ?? pedido.fecha_creacion;
   const cliente      = pedido.nombre_cliente ?? pedido.direccion?.nombre_completo ?? '—';
 
+  // id_pago se rellena una vez que carga el pago asíncronamente
+  let pagoId = null;
+
+  // ── Información de pago ──────────────────────────────────────
+  const buildPagoHtml = pago => {
+    const metodoLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia Bancaria', link_pago: 'Link de Pago' };
+    const estadoLabel = { pendiente: 'Pendiente de revisión', confirmado: 'Confirmado', rechazado: 'Rechazado' };
+    const estadoClass = { pendiente: 'badge-yellow', confirmado: 'badge-green', rechazado: 'badge-red' };
+
+    return `
+      <div style="background:rgba(42,42,42,.4);border-radius:8px;padding:14px;font-size:13px;line-height:2;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="color:var(--muted-fg);">Método:</span>
+          <span style="font-weight:500;">${metodoLabel[pago.metodo_pago] || pago.metodo_pago}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="color:var(--muted-fg);">Estado pago:</span>
+          <span class="badge ${estadoClass[pago.estado_pago] || ''}">${estadoLabel[pago.estado_pago] || pago.estado_pago}</span>
+        </div>
+        ${pago.referencia ? `
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="color:var(--muted-fg);">Referencia:</span>
+          <span style="font-weight:700;letter-spacing:2px;color:var(--primary);">${pago.referencia}</span>
+        </div>` : ''}
+        ${pago.comprobante_pago ? `
+        <div style="margin-top:6px;">
+          <a href="${pago.comprobante_pago}" target="_blank" rel="noopener"
+             style="display:inline-flex;align-items:center;gap:6px;color:var(--primary);text-decoration:none;">
+            ${Icons.FileCheck(16)} Ver comprobante
+          </a>
+        </div>` : `<p style="color:var(--muted-fg);font-size:12px;">Sin comprobante adjunto</p>`}
+      </div>`;
+  };
+
   // ── Dirección ────────────────────────────────────────────────
   const buildDireccionHtml = dir => {
     if (!dir || !dir.calle) {
@@ -739,6 +773,14 @@ function abrirDetallePedidoVendedor(pedido) {
           <div id="detalle-vend-dir">${buildDireccionHtml(pedido.direccion)}</div>
         </div>
 
+        <!-- Información de pago -->
+        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
+          <p class="order-section-title">${Icons.CreditCard(16)} Información de Pago</p>
+          <div id="detalle-vend-pago">
+            <p style="font-size:13px;color:var(--muted-fg);">Cargando...</p>
+          </div>
+        </div>
+
         <!-- Comentarios -->
         ${pedido.comentarios_cliente ? `
           <div class="order-comments">
@@ -786,20 +828,20 @@ function abrirDetallePedidoVendedor(pedido) {
     abrirCambioEstado(idMostrar, pedido.estado);
   });
 
-  // Confirmar pago directamente (esperando_pago → pagado)
+  // Confirmar pago: usa el id_pago cargado asíncronamente
   document.getElementById('btn-detalle-vend-pago')?.addEventListener('click', () => {
+    if (!pagoId) {
+      showToast('Espera, cargando información del pago...', 'error');
+      return;
+    }
     const btn = document.getElementById('btn-detalle-vend-pago');
     btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    btn.textContent = 'Confirmando...';
 
-    Api.actualizarEstadoPedido(idMostrar, {
-      estado: 'pagado',
-      estado_actual: 'esperando_pago',
-      comentarios_vendedor: null
-    })
+    Api.confirmarPago(pagoId)
       .then(() => {
         cerrar();
-        showToast('Pago confirmado. Estado actualizado a "Pagado".', 'success');
+        showToast('Pago confirmado. Pedido marcado como "Pagado".', 'success');
         return Api.getPedidos();
       })
       .then(data => {
@@ -819,7 +861,7 @@ function abrirDetallePedidoVendedor(pedido) {
     abrirModalComentario(idMostrar, pedido.comentarios_vendedor || '');
   });
 
-  // Cargar el detalle completo desde la API: productos y dirección
+  // Cargar el detalle completo: productos, dirección e información de pago
   if (!isNaN(Number(idMostrar))) {
     Api.getPedidoById(Number(idMostrar))
       .then(data => {
@@ -834,6 +876,18 @@ function abrirDetallePedidoVendedor(pedido) {
         }
       })
       .catch(() => {});
+
+    Api.getPagoByPedido(Number(idMostrar))
+      .then(pago => {
+        pagoId = Number(pago.id_pago);
+        const container = document.getElementById('detalle-vend-pago');
+        if (container) container.innerHTML = buildPagoHtml(pago);
+      })
+      .catch(() => {
+        const container = document.getElementById('detalle-vend-pago');
+        if (container) container.innerHTML =
+          '<p style="font-size:13px;color:var(--muted-fg);">Sin registro de pago.</p>';
+      });
   }
 }
 

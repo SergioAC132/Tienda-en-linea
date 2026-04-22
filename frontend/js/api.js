@@ -234,15 +234,6 @@ const Api = {
   },
 
   /**
-   * Avanza el estado de un pedido de 'pendiente' a 'esperando_pago'.
-   * Se llama desde pago.js cuando el cliente registra su intención de pago.
-   * No envía body — el backend identifica al usuario por el token JWT.
-   * Solo disponible para el rol CLIENTE.
-   *
-   * @param {number} idPedido - ID del pedido en la BD (id_pedido, no el local)
-   * @returns {Object} El pedido con estado 'esperando_pago'
-   */
-  /**
    * Agrega o edita el comentario interno del vendedor en un pedido.
    * No modifica el estado del pedido — solo actualiza comentarios_vendedor.
    * Solo disponible para roles VENDEDOR y ADMIN.
@@ -263,14 +254,44 @@ const Api = {
     return data;
   },
 
-  async iniciarPagoPedido(idPedido) {
+  // ─── Pagos ───────────────────────────────────────────────────
+
+  async getMetodosPago() {
+    return await this._req('/pagos/metodos');
+  },
+
+  async registrarPago(idPedido, idMetodoPago) {
+    return await this._req('/pagos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_pedido: idPedido, id_metodo_pago: idMetodoPago }),
+    });
+  },
+
+  async getPagoByPedido(idPedido) {
+    return await this._req(`/pagos/pedido/${idPedido}`);
+  },
+
+  async confirmarPago(idPago) {
+    return await this._req(`/pagos/${idPago}/confirmar`, { method: 'PATCH' });
+  },
+
+  async rechazarPago(idPago) {
+    return await this._req(`/pagos/${idPago}/rechazar`, { method: 'PATCH' });
+  },
+
+  async subirComprobante(idPago, file) {
     const token = AppState.getToken();
-    const res = await fetch(`${API_URL}/pedidos/${idPedido}/pagar`, {
+    const formData = new FormData();
+    formData.append('comprobante', file);
+    const res = await fetch(`${API_URL}/pagos/${idPago}/comprobante`, {
       method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData,
     });
     const data = await res.json();
-    if (!res.ok) throw { status: res.status, message: data.message || 'Error al registrar el pago del pedido' };
+    if (!res.ok) throw { status: res.status, message: data.message || 'Error al subir el comprobante' };
+    return data;
   },
 
   // ─── Carrito ─────────────────────────────────────────────────

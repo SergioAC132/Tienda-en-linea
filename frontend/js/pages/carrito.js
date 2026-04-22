@@ -176,9 +176,9 @@ function renderCarrito() {
       .then(apiResp => {
         // Vaciar carrito en BD (fire-and-forget; el pedido ya está creado)
         Api.vaciarCarrito().catch(() => {});
-        // Crear el pedido en estado local (también limpia el carrito local)
-        const pedidoLocal = AppState.crearPedido(dirId, comentarios, apiResp.id_pedido);
-        Nav.go(Nav.pago(pedidoLocal.id));
+        // Sincronizar estado local y navegar con el ID real de la BD
+        AppState.crearPedido(dirId, comentarios, apiResp.id_pedido);
+        Nav.go(Nav.pago(apiResp.id_pedido));
       })
       .catch(err => {
         // Si la API falla no se avanza — el carrito queda intacto

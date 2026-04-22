@@ -347,31 +347,6 @@ const updateComentarioVendedor = async (idPedido, comentario) => {
 
 
 /**
- * Avanza el estado de un pedido de 'pendiente' a 'esperando_pago'.
- * Se llama cuando el cliente registra su intención de pago desde pago.js.
- * Solo aplica si el pedido pertenece al usuario y está en estado 'pendiente',
- * ya que no tiene sentido avanzar un pedido que ya fue pagado o cancelado.
- *
- * @param {number} idPedido  - ID del pedido a actualizar
- * @param {number} idUsuario - ID del cliente autenticado (verifica que sea su pedido)
- * @returns {Object|null} El pedido actualizado, o null si no se encontró o no era 'pendiente'
- */
-const iniciarPagoPedido = async (idPedido, idUsuario) => {
-    const { rows } = await pool.query(
-        `UPDATE pedidos
-         SET estado = 'esperando_pago'
-         WHERE id_pedido = $1
-           AND id_usuario = $2
-           AND estado = 'pendiente'
-         RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
-                   comentarios_cliente, comentarios_vendedor`,
-        [idPedido, idUsuario]
-    );
-    return rows[0] || null;
-};
-
-
-/**
  * Obtiene los 5 productos con mayor cantidad total vendida en detalle_pedidos.
  * Agrega la cantidad de todas las tallas y pedidos por producto.
  * Incluye la imagen principal (orden = 1) si existe.
@@ -406,6 +381,5 @@ module.exports = {
     updateEstadoPedido,
     updateComentarioVendedor,
     cancelarPedido,
-    iniciarPagoPedido,
     findTopProductos,
 };
