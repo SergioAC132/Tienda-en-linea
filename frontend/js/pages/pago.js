@@ -11,6 +11,7 @@ let _pago             = null;   // pago creado en BD (paso 1 de transferencia)
 const METODO_INFO = {
   efectivo:      { icon: () => Icons.Banknote(24),    titulo: 'Efectivo',               desc: 'Pago contra entrega' },
   transferencia: { icon: () => Icons.CreditCard(24),  titulo: 'Transferencia Bancaria', desc: 'Depósito o transferencia electrónica' },
+  link_pago:     { icon: () => Icons.CreditCard(24),  titulo: 'Link de Pago',           desc: 'Paga en línea con tarjeta o monedero' },
 };
 
 
@@ -54,8 +55,7 @@ function renderPago() {
       }
 
       _pedido  = pedido;
-      // link_pago queda pendiente de integración con Clip — no se muestra aún
-      _metodos = metodos.filter(m => m.nombre !== 'link_pago');
+      _metodos = metodos;
 
       if (!_selectedMetodoId && _metodos.length > 0) {
         _selectedMetodoId = Number(_metodos[0].id_metodo_pago);
@@ -299,7 +299,11 @@ async function manejarRegistroPago(root) {
   try {
     const pago = await Api.registrarPago(_pedido.id_pedido, _selectedMetodoId);
 
-    if (metodoSel?.nombre === 'transferencia') {
+    if (metodoSel?.nombre === 'link_pago' && pago.url_pago) {
+      // Redirigir al cliente al link de pago generado por Clip
+      limpiarEstado();
+      window.location.href = pago.url_pago;
+    } else if (metodoSel?.nombre === 'transferencia') {
       // Guardar el pago creado y re-renderizar para mostrar la referencia
       _pago = pago;
       renderFormulario(root);

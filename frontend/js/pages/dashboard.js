@@ -1,11 +1,11 @@
 // ===== DASHBOARD PAGE =====
 
-// Estado de los filtros activos en la tabla de pedidos activos.
-// Se conservan mientras el dashboard esté montado para no perder
-// la selección al reasignar eventos después de cambiar un estado.
+// Estado del módulo — persiste entre re-renders para no perder datos
+// ya cargados cuando se refresca solo una parte del dashboard.
 let _filtroEstado      = '';
 let _filtroFechaDesde  = '';
 let _filtroFechaHasta  = '';
+let _topProductos      = [];   // cargado una vez desde la API al iniciar
 
 /**
  * Punto de entrada de la página.
@@ -28,13 +28,14 @@ function renderDashboard() {
 
   Promise.all([
     Api.getPedidos(),
-    Api.getTopProductos().catch(() => []),
+    Api.getTopProductos().catch(err => { console.error('getTopProductos:', err); return []; }),
   ]).then(([pedidos, topProductos]) => {
     AppState.setPedidos(pedidos);
-    renderDashboardContent(topProductos);
-  }).catch(() => {
-    // Si la API falla mostrar lo que haya en el estado local
-    renderDashboardContent([]);
+    _topProductos = topProductos;
+    renderDashboardContent();
+  }).catch(err => {
+    console.error('renderDashboard:', err);
+    renderDashboardContent();
   });
 }
 
@@ -44,7 +45,8 @@ function renderDashboard() {
  * almacenados en AppState (ya cargados desde la API).
  * Calcula métricas, arma las secciones y dibuja la tabla de pedidos activos.
  */
-function renderDashboardContent(topProductos = []) {
+function renderDashboardContent() {
+  const topProductos = _topProductos;
   const root = document.getElementById('app-root');
   const pedidos = AppState.pedidos;
 

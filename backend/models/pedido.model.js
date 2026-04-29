@@ -358,13 +358,15 @@ const findTopProductos = async () => {
         `SELECT
            dp.id_producto,
            pr.nombre,
-           img.url_imagen AS imagen_url,
+           (SELECT url_imagen
+            FROM   imagen_producto
+            WHERE  id_producto = dp.id_producto
+            ORDER  BY orden, id_imagen
+            LIMIT  1) AS imagen_url,
            SUM(dp.cantidad) AS total_vendido
          FROM detalle_pedidos dp
          JOIN productos pr ON pr.id_producto = dp.id_producto
-         LEFT JOIN imagen_producto img
-           ON img.id_producto = dp.id_producto AND img.orden = 1
-         GROUP BY dp.id_producto, pr.nombre, img.url_imagen
+         GROUP BY dp.id_producto, pr.nombre
          ORDER BY total_vendido DESC
          LIMIT 5`
     );

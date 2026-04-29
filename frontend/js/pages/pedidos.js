@@ -10,6 +10,12 @@ function renderPedidos() {
   renderHeader();
 
   const root = document.getElementById('app-root');
+  const pagoCompletado = getParam('pago') === 'completado';
+
+  // Limpiar el parámetro de la URL para que un refresh no reactive el polling
+  if (pagoCompletado) {
+    history.replaceState(null, '', window.location.pathname);
+  }
 
   // Mostrar estado de carga mientras se espera la respuesta de la API
   root.innerHTML = `
@@ -22,6 +28,10 @@ function renderPedidos() {
     .then(data => {
       AppState.setPedidos(data);
       renderPedidosList();
+      if (pagoCompletado) {
+        showToast('¡Pago procesado! Actualizando estado del pedido...');
+        esperarConfirmacion(data);
+      }
     })
     .catch(() => {
       // Si la API falla, intentar mostrar lo que haya en el estado local
@@ -355,6 +365,43 @@ function abrirDetallePedidoCliente(pedido) {
       })
       .catch(() => {});
   }
+}
+
+
+/**
+ * Hace polling a la API cada 2 segundos (máximo 5 veces) hasta detectar
+ * que algún pedido que estaba en 'esperando_pago' pasó a 'pagado'.
+ * Cuando lo detecta, actualiza la lista y muestra una notificación.
+ * Se activa solo cuando Clip redirige con ?pago=completado.
+ *
+ * @param {Array} pedidosAnteriores - Snapshot de pedidos cargados al llegar a la página
+ */
+function esperarConfirmacion(pedidosAnteriores) {
+  let intentos = 0;
+  const MAX_INTENTOS = 5;
+
+  const intervalo = setInterval(() => {
+    intentos++;
+    Api.getPedidos()
+      .then(data => {
+        const hayNuevoPagado = data.some(nuevo =>
+          nuevo.estado === 'pagado' &&
+          pedidosAnteriores.some(
+            ant => String(ant.id_pedido) === String(nuevo.id_pedido) && ant.estado !== 'pagado'
+          )
+        );
+
+        if (hayNuevoPagado) {
+          clearInterval(intervalo);
+          AppState.setPedidos(data);
+          renderPedidosList();
+          showToast('¡Pago confirmado! Tu pedido ha sido actualizado.');
+        } else if (intentos >= MAX_INTENTOS) {
+          clearInterval(intervalo);
+        }
+      })
+      .catch(() => clearInterval(intervalo));
+  }, 2000);
 }
 
 

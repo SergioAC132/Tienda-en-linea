@@ -35,7 +35,8 @@ const generarReferenciaUnica = async (client) => {
  * Comportamiento por método:
  *   - efectivo:      sin referencia, sin url.
  *   - transferencia: genera referencia de 7 dígitos.
- *   - link_pago:     lanza LINK_PAGO_NO_DISPONIBLE (pendiente integración Clip).
+ *   - link_pago:     usa extras.referencia (payment_request_id) y extras.urlPago
+ *                    generados previamente por clipService.
  *
  * El monto se toma directamente del total del pedido en la BD
  * para evitar manipulación desde el cliente.
@@ -43,9 +44,10 @@ const generarReferenciaUnica = async (client) => {
  * @param {number} idPedido     - ID del pedido (debe pertenecer al idUsuario y estar en 'pendiente')
  * @param {number} idUsuario    - ID del cliente (verificación de pertenencia)
  * @param {number} idMetodoPago - ID del método de pago
+ * @param {Object} extras       - Datos adicionales para link_pago: { urlPago, referencia }
  * @returns {Object} El pago creado con todos sus campos y metodo_pago incluido
  */
-const createPago = async (idPedido, idUsuario, idMetodoPago) => {
+const createPago = async (idPedido, idUsuario, idMetodoPago, extras = {}) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -57,9 +59,6 @@ const createPago = async (idPedido, idUsuario, idMetodoPago) => {
         );
         if (metodoRows.length === 0) throw new Error('METODO_NO_VALIDO');
         const nombreMetodo = metodoRows[0].nombre;
-
-        // link_pago queda reservado para la integración con la API de Clip
-        if (nombreMetodo === 'link_pago') throw new Error('LINK_PAGO_NO_DISPONIBLE');
 
         // 1. Verificar que el pedido pertenece al usuario y está en 'pendiente'
         const { rows: pedidoRows } = await client.query(
@@ -77,21 +76,26 @@ const createPago = async (idPedido, idUsuario, idMetodoPago) => {
         );
         if (rowCount > 0) throw new Error('PAGO_DUPLICADO');
 
-        // 3. Generar referencia de 7 dígitos para transferencia
+        // 3. Determinar referencia y url_pago según el método
         let referencia = null;
+        let urlPago    = null;
+
         if (nombreMetodo === 'transferencia') {
             referencia = await generarReferenciaUnica(client);
+        } else if (nombreMetodo === 'link_pago') {
+            referencia = extras.referencia || null;
+            urlPago    = extras.urlPago    || null;
         }
 
         // 4. Insertar el registro de pago
         const { rows: pagoRows } = await client.query(
             `INSERT INTO pagos
-               (id_pedido, id_metodo_pago, estado_pago, fecha_registro, referencia, monto)
-             VALUES ($1, $2, 'pendiente', NOW(), $3, $4)
+               (id_pedido, id_metodo_pago, estado_pago, fecha_registro, referencia, monto, url_pago)
+             VALUES ($1, $2, 'pendiente', NOW(), $3, $4, $5)
              RETURNING id_pago, id_pedido, id_metodo_pago, estado_pago,
                        fecha_registro, fecha_confirmacion, referencia,
                        comprobante_pago, url_pago, monto`,
-            [idPedido, idMetodoPago, referencia, monto]
+            [idPedido, idMetodoPago, referencia, monto, urlPago]
         );
 
         // 5. Avanzar el pedido a 'esperando_pago'
@@ -293,6 +297,85 @@ const findMetodosPago = async () => {
 };
 
 
+/**
+ * Obtiene el nombre de un método de pago por su ID.
+ * Usado por el controller para detectar link_pago antes de llamar a Clip.
+ *
+ * @param {number} idMetodoPago
+ * @returns {{ nombre: string }|null}
+ */
+const findMetodoPagoById = async (idMetodoPago) => {
+    const { rows } = await pool.query(
+        'SELECT nombre FROM metodos_pago WHERE id_metodo_pago = $1',
+        [idMetodoPago]
+    );
+    return rows[0] || null;
+};
+
+
+/**
+ * Devuelve el total de un pedido en estado 'pendiente' que pertenezca al usuario.
+ * Usado antes de llamar a Clip para obtener el monto a cobrar.
+ *
+ * @param {number} idPedido
+ * @param {number} idUsuario
+ * @returns {string|null} Total numérico como string (PostgreSQL NUMERIC), o null si no aplica
+ */
+const findPedidoTotal = async (idPedido, idUsuario) => {
+    const { rows } = await pool.query(
+        `SELECT total FROM pedidos
+         WHERE id_pedido = $1 AND id_usuario = $2 AND estado = 'pendiente'`,
+        [idPedido, idUsuario]
+    );
+    return rows[0] ? rows[0].total : null;
+};
+
+
+/**
+ * Confirma un pago de Clip buscándolo por su payment_request_id (campo referencia).
+ * Actualiza estado_pago a 'confirmado' y avanza el pedido a 'pagado'.
+ * Llamado desde el webhook de Clip cuando status = CHECKOUT_COMPLETED.
+ *
+ * @param {string} referencia - payment_request_id enviado por Clip en el webhook
+ * @returns {Object|null} El pago actualizado, o null si no estaba pendiente / no existe
+ */
+const confirmarPagoPorReferencia = async (referencia) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { rows } = await client.query(
+            `UPDATE pagos
+             SET estado_pago = 'confirmado', fecha_confirmacion = NOW()
+             WHERE referencia = $1 AND estado_pago = 'pendiente'
+             RETURNING id_pago, id_pedido, id_metodo_pago, estado_pago,
+                       fecha_registro, fecha_confirmacion, referencia,
+                       comprobante_pago, url_pago, monto`,
+            [referencia]
+        );
+        const pago = rows[0];
+
+        if (!pago) {
+            await client.query('ROLLBACK');
+            return null;
+        }
+
+        await client.query(
+            `UPDATE pedidos SET estado = 'pagado' WHERE id_pedido = $1`,
+            [pago.id_pedido]
+        );
+
+        await client.query('COMMIT');
+        return pago;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
+
 module.exports = {
     createPago,
     findPagoByPedido,
@@ -301,4 +384,7 @@ module.exports = {
     rechazarPago,
     adjuntarComprobante,
     findMetodosPago,
+    findMetodoPagoById,
+    findPedidoTotal,
+    confirmarPagoPorReferencia,
 };

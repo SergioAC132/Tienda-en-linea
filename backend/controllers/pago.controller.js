@@ -6,7 +6,11 @@ const {
     rechazarPago,
     adjuntarComprobante,
     findMetodosPago,
+    findMetodoPagoById,
+    findPedidoTotal,
 } = require('../models/pago.model');
+
+const clipService = require('../services/clipService');
 
 // ─────────────────────────────────────────────────────────────
 //  CONTROLLER DE PAGOS
@@ -38,27 +42,46 @@ const getMetodosPago = async (req, res) => {
  * POST /api/pagos
  * UC-07 (pasos 9–13): Registra el método de pago del pedido y lo avanza
  * a 'esperando_pago'. Crea el registro en la tabla pagos.
+ * Para link_pago, genera el link en Clip antes de insertar en BD y devuelve url_pago.
  * Solo el Cliente dueño del pedido puede usar este endpoint.
  *
  * Body esperado (ya validado por validarRegistrarPago):
  *   - id_pedido      {number} ID del pedido en estado 'pendiente'
  *   - id_metodo_pago {number} ID del método de pago seleccionado
  *
- * Responde con 201 y el pago creado (incluye referencia si es transferencia),
+ * Responde con 201 y el pago creado (incluye url_pago si es link_pago),
  * o el error correspondiente si el pedido no aplica.
  */
 const registrarPago = async (req, res) => {
     const { id_pedido, id_metodo_pago } = req.body;
     try {
         const idUsuario = req.usuario.id_usuario;
-        const pago = await createPago(id_pedido, idUsuario, id_metodo_pago);
+
+        // Para link_pago: obtener el monto y generar el link en Clip antes de la transacción BD
+        let extras = {};
+        const metodo = await findMetodoPagoById(id_metodo_pago);
+
+        if (metodo?.nombre === 'link_pago') {
+            const total = await findPedidoTotal(id_pedido, idUsuario);
+            if (total === null) {
+                return res.status(404).json({
+                    message: 'Pedido no encontrado, no te pertenece, o ya no está en estado pendiente.'
+                });
+            }
+            try {
+                const clip = await clipService.generarLinkPago(id_pedido, total);
+                extras = { urlPago: clip.payment_request_url, referencia: clip.payment_request_id };
+            } catch (clipErr) {
+                console.error('Error Clip API:', clipErr.message);
+                return res.status(502).json({
+                    message: 'No se pudo generar el link de pago. Intenta de nuevo más tarde.'
+                });
+            }
+        }
+
+        const pago = await createPago(id_pedido, idUsuario, id_metodo_pago, extras);
         res.status(201).json(pago);
     } catch (error) {
-        if (error.message === 'LINK_PAGO_NO_DISPONIBLE') {
-            return res.status(503).json({
-                message: 'El pago por link no está disponible aún. Por favor usa efectivo o transferencia.'
-            });
-        }
         if (error.message === 'METODO_NO_VALIDO') {
             return res.status(400).json({ message: 'El método de pago seleccionado no existe.' });
         }
