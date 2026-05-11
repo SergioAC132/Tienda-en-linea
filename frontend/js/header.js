@@ -3,7 +3,24 @@ function renderHeader() {
   const root = document.getElementById('header-root');
   if (!root) return;
   const user = AppState.currentUser;
-  if (!user) { root.innerHTML = ''; return; }
+
+  if (!user) {
+    root.innerHTML = `
+      <header>
+        <div class="header-inner">
+          <a class="header-logo" href="${Nav.catalogo}">
+            Tintin <span>Luxury</span>
+          </a>
+          <nav class="header-nav">
+            <a href="${Nav.login}" class="btn btn-primary" style="display:flex;align-items:center;gap:6px;">
+              ${Icons.User(18)} Identificarse
+            </a>
+          </nav>
+        </div>
+      </header>
+    `;
+    return;
+  }
 
   const cartCount = AppState.getCarritoCount();
 

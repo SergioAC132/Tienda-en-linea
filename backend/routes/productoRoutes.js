@@ -21,18 +21,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-// CATÁLOGO PÚBLICO (Cliente autenticado)
+// CATÁLOGO PÚBLICO — sin autenticación requerida
 // UC-03 Ver catálogo de productos
-router.get('/productos', verificarToken, verificarRol('CLIENTE'), ctrl.getCatalogo);
+router.get('/productos', ctrl.getCatalogo);
 
-// UC-04 Ver detalle de producto (también accesible para VENDEDOR/ADMIN)
-router.get('/productos/:id', verificarToken, verificarRol('CLIENTE', 'VENDEDOR', 'ADMIN'), ctrl.getProductoDetalle);
+// UC-04 Ver detalle de producto
+router.get('/productos/:id', ctrl.getProductoDetalle);
 
 //  TALLAS (Vendedor / Admin)
-router.get   ('/tallas',     verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.getTallas);
-router.post  ('/tallas',     verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.createTalla);
-router.put   ('/tallas/:id', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.updateTalla);
-router.delete('/tallas/:id', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.deleteTalla);
+router.get   ('/tallas',          verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.getTallas);
+router.post  ('/tallas',          verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.createTalla);
+router.put   ('/tallas/:id',      verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.updateTalla);
+router.delete('/tallas/:id',      verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.deleteTalla);
+router.patch ('/tallas/:id/orden',verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.swapOrdenTallas);
 
 //  GESTIÓN DE PRODUCTOS (Vendedor / Admin) — UC-05
 // Listar todos (activos e inactivos)
@@ -49,6 +50,9 @@ router.put('/admin/productos/:id', verificarToken, verificarRol('VENDEDOR', 'ADM
 
 // Desactivar producto (soft delete)
 router.patch('/admin/productos/:id/desactivar', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.desactivarProducto);
+
+// Actualizar stock de una talla
+router.patch('/admin/productos/:id/tallas/:idTalla/stock', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), ctrl.updateStockTalla);
 
 //  IMÁGENES del producto
 // Agregar imagen (con soporte multer para upload de archivo)

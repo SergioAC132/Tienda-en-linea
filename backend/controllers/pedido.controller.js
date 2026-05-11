@@ -20,10 +20,10 @@ const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedido
  * Responde con 201 y el pedido creado, o 500 si ocurre un error inesperado.
  */
 const crearPedido = async (req, res) => {
-    const { total, id_direccion, comentarios } = req.body;
+    const { total, id_direccion, comentarios, tipo_entrega, id_punto_entrega } = req.body;
     try {
         const idUsuario = req.usuario.id_usuario;
-        const nuevoPedido = await createPedido(idUsuario, total, id_direccion, comentarios);
+        const nuevoPedido = await createPedido(idUsuario, total, id_direccion, comentarios, tipo_entrega, id_punto_entrega);
         res.status(201).json(nuevoPedido);
     } catch (error) {
         if (error.message && error.message.startsWith('Stock insuficiente')) {

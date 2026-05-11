@@ -83,6 +83,14 @@ function renderPedidosList() {
     });
   });
 
+  // Botón para pedidos en esperando_pago — navega a la página de pago
+  document.querySelectorAll('.btn-ir-pago').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      Nav.go(Nav.pago(btn.dataset.id));
+    });
+  });
+
   // Abrir detalle al hacer click en la tarjeta (excepto en los botones de acción)
   document.querySelectorAll('.order-card').forEach(card => {
     card.addEventListener('click', e => {
@@ -125,21 +133,28 @@ function renderTarjetaPedido(pedido) {
       <p class="form-hint">${pedido.comentarios_cliente}</p>
     </div>` : '';
 
-  // Botones de acción: solo disponibles cuando el pedido está en 'pendiente'.
-  // "Registrar pago" lleva al cliente a la página de pago (izquierda).
-  // "Cancelar pedido" permite anular el pedido (derecha).
-  const botonesAccionHtml = pedido.estado === 'pendiente' ? `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
-      <button class="btn btn-primary btn-sm btn-registrar-pago"
-              data-id="${idMostrar}">
-        Registrar pago
-      </button>
-      <button class="btn btn-outline btn-sm btn-cancelar-pedido"
-              data-id="${idMostrar}"
-              style="color:var(--destructive);border-color:var(--destructive);">
-        Cancelar pedido
-      </button>
-    </div>` : '';
+  // Botones de acción: disponibles según estado del pedido.
+  // 'pendiente': registrar pago y cancelar. 'esperando_pago': ir a ver el pago.
+  const botonesAccionHtml =
+    pedido.estado === 'pendiente' ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
+        <button class="btn btn-primary btn-sm btn-registrar-pago"
+                data-id="${idMostrar}">
+          Registrar pago
+        </button>
+        <button class="btn btn-outline btn-sm btn-cancelar-pedido"
+                data-id="${idMostrar}"
+                style="color:var(--destructive);border-color:var(--destructive);">
+          Cancelar pedido
+        </button>
+      </div>` :
+    pedido.estado === 'esperando_pago' ? `
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary btn-sm btn-ir-pago"
+                data-id="${idMostrar}">
+          Ver pago
+        </button>
+      </div>` : '';
 
   return `
     <div class="order-card" data-id="${idMostrar}">
@@ -257,8 +272,9 @@ function abrirDetallePedidoCliente(pedido) {
     }).join('');
   };
 
-  const itemsIniciales = pedido.items || pedido.detalles || [];
-  const esPendiente    = pedido.estado === 'pendiente';
+  const itemsIniciales    = pedido.items || pedido.detalles || [];
+  const esPendiente       = pedido.estado === 'pendiente';
+  const esEsperandoPago   = pedido.estado === 'esperando_pago';
 
   // ── Modal ────────────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -325,6 +341,10 @@ function abrirDetallePedidoCliente(pedido) {
                   style="color:var(--destructive);border-color:var(--destructive);">
             Cancelar pedido
           </button>` : ''}
+        ${esEsperandoPago ? `
+          <button class="btn btn-primary" id="btn-detalle-cli-ver-pago">
+            Ver pago
+          </button>` : ''}
         <button class="btn btn-outline" id="btn-cerrar-detalle-cli" style="margin-left:auto;">
           Cerrar
         </button>
@@ -346,6 +366,13 @@ function abrirDetallePedidoCliente(pedido) {
     document.getElementById('btn-detalle-cli-cancelar').addEventListener('click', () => {
       cerrar();
       cancelarPedido(idMostrar);
+    });
+  }
+
+  if (esEsperandoPago) {
+    document.getElementById('btn-detalle-cli-ver-pago').addEventListener('click', () => {
+      cerrar();
+      Nav.go(Nav.pago(idMostrar));
     });
   }
 

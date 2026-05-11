@@ -369,26 +369,35 @@ const Api = {
   },
 
   // ─── Admin: crear producto (UC-05) ───────────────────────────
-  async createProducto({ nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas }) {
+  async createProducto({ nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas, tallas_stock }) {
     return await this._req('/admin/productos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas })
+      body: JSON.stringify({ nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas, tallas_stock })
     });
   },
 
   // ─── Admin: editar producto (UC-05) ──────────────────────────
-  async updateProducto(id, { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas }) {
+  async updateProducto(id, { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas, tallas_stock }) {
     return await this._req(`/admin/productos/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas })
+      body: JSON.stringify({ nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas, tallas_stock })
     });
   },
 
   // ─── Admin: desactivar producto — UC-05 flujo alt. 10b ───────
   async desactivarProducto(id) {
     return await this._req(`/admin/productos/${id}/desactivar`, { method: 'PATCH' });
+  },
+
+  // ─── Admin: actualizar stock de una talla ────────────────────
+  async updateStockTalla(productoId, idTalla, stock) {
+    return await this._req(`/admin/productos/${productoId}/tallas/${idTalla}/stock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stock })
+    });
   },
 
   // ─── Imágenes ─────────────────────────────────────────────────
@@ -445,6 +454,14 @@ const Api = {
     return await this._req(`/tallas/${id}`, { method: 'DELETE' });
   },
 
+  async swapTallaOrden(id1, id2) {
+    return await this._req(`/tallas/${id1}/orden`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ swap_with: id2 })
+    });
+  },
+
   // ─── Admin: gestión de usuarios ──────────────────────────────
 
   /* GET /api/admin/usuarios — devuelve todos los usuarios normalizados */
@@ -467,5 +484,43 @@ const Api = {
       id:     String(data.id_usuario),
       estado: data.activo ? 'activo' : 'inactivo',
     };
+  },
+
+  /* POST /api/admin/usuarios — crea usuario con rol VENDEDOR o ADMIN */
+  async crearUsuario({ nombre, email, password, rol, confirmar_admin }) {
+    const data = await this._req('/admin/usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, email, password, rol, confirmar_admin }),
+    });
+    return {
+      id:             String(data.id_usuario),
+      nombre:         data.nombre,
+      correo:         data.email,
+      rol:            data.rol,
+      estado:         data.activo ? 'activo' : 'inactivo',
+      fecha_creacion: data.fecha_creacion,
+    };
+  },
+
+  // ─── Puntos de entrega ───────────────────────────────────────
+
+  /* GET /api/admin/puntos-entrega — activos para CLIENTE, todos para ADMIN */
+  async getPuntosEntrega() {
+    return await this._req('/admin/puntos-entrega');
+  },
+
+  /* POST /api/admin/puntos-entrega — crea un punto de entrega */
+  async crearPuntoEntrega({ nombre, descripcion }) {
+    return await this._req('/admin/puntos-entrega', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, descripcion }),
+    });
+  },
+
+  /* PATCH /api/admin/puntos-entrega/:id/estado — activa/desactiva */
+  async toggleActivoPunto(id) {
+    return await this._req(`/admin/puntos-entrega/${id}/estado`, { method: 'PATCH' });
   },
 }

@@ -33,7 +33,7 @@ const TRANSICIONES_VALIDAS = {
  * Si falla, responde con 400 y un arreglo de errores.
  */
 const validarCrearPedido = (req, res, next) => {
-    const { total, id_direccion, comentarios } = req.body;
+    const { total, id_direccion, id_punto_entrega, tipo_entrega, comentarios } = req.body;
     const errores = [];
 
     // ── total ────────────────────────────────────────────────
@@ -46,13 +46,27 @@ const validarCrearPedido = (req, res, next) => {
         }
     }
 
-    // ── id_direccion ─────────────────────────────────────────
-    if (id_direccion === undefined || id_direccion === null || id_direccion === '') {
-        errores.push('El campo id_direccion es requerido.');
+    // ── tipo_entrega + validación condicional ────────────────
+    const tipoNorm = (tipo_entrega || 'envio').toString().trim();
+    if (!['envio', 'punto_entrega'].includes(tipoNorm)) {
+        errores.push("El tipo_entrega debe ser 'envio' o 'punto_entrega'.");
+    } else if (tipoNorm === 'punto_entrega') {
+        if (id_punto_entrega === undefined || id_punto_entrega === null || id_punto_entrega === '') {
+            errores.push('El campo id_punto_entrega es requerido cuando tipo_entrega es punto_entrega.');
+        } else {
+            const idNum = Number(id_punto_entrega);
+            if (!Number.isInteger(idNum) || idNum <= 0) {
+                errores.push('El id_punto_entrega debe ser un entero positivo.');
+            }
+        }
     } else {
-        const idNum = Number(id_direccion);
-        if (!Number.isInteger(idNum) || idNum <= 0) {
-            errores.push('El id_direccion debe ser un entero positivo.');
+        if (id_direccion === undefined || id_direccion === null || id_direccion === '') {
+            errores.push('El campo id_direccion es requerido cuando tipo_entrega es envio.');
+        } else {
+            const idNum = Number(id_direccion);
+            if (!Number.isInteger(idNum) || idNum <= 0) {
+                errores.push('El id_direccion debe ser un entero positivo.');
+            }
         }
     }
 
@@ -71,7 +85,14 @@ const validarCrearPedido = (req, res, next) => {
 
     // Normalizar antes de pasar al controller
     req.body.total        = Number(total);
-    req.body.id_direccion = Number(id_direccion);
+    req.body.tipo_entrega = tipoNorm;
+    if (tipoNorm === 'punto_entrega') {
+        req.body.id_punto_entrega = Number(id_punto_entrega);
+        req.body.id_direccion     = null;
+    } else {
+        req.body.id_direccion     = Number(id_direccion);
+        req.body.id_punto_entrega = null;
+    }
 
     next();
 };

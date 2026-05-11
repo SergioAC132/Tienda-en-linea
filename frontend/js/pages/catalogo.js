@@ -3,7 +3,6 @@ let _catalogOrder    = 'fecha';
 let _catalogProductos = null; // cache tras el primer fetch
 
 async function renderCatalogo() {
-  if (!requireAuth(['CLIENTE'])) return;
   renderHeader();
 
   const root = document.getElementById('app-root');

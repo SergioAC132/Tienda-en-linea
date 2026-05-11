@@ -20,18 +20,19 @@ const pool = require('../config/db');
  * @param {string|null} comentarios - Comentarios opcionales del cliente
  * @returns {Object} El pedido recién creado con todos sus campos
  */
-const createPedido = async (idUsuario, total, idDireccion, comentarios) => {
+const createPedido = async (idUsuario, total, idDireccion, comentarios, tipoEntrega = 'envio', idPuntoEntrega = null) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
         // 1. Insertar el pedido principal
         const { rows: pedidoRows } = await client.query(
-            `INSERT INTO pedidos (id_usuario, fecha_pedido, estado, total, id_direccion, comentarios_cliente)
-             VALUES ($1, NOW(), 'pendiente', $2, $3, $4)
+            `INSERT INTO pedidos (id_usuario, fecha_pedido, estado, total, id_direccion, comentarios_cliente, tipo_entrega, id_punto_entrega)
+             VALUES ($1, NOW(), 'pendiente', $2, $3, $4, $5, $6)
              RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
-                       id_direccion, comentarios_cliente, comentarios_vendedor`,
-            [idUsuario, total, idDireccion, comentarios || null]
+                       id_direccion, comentarios_cliente, comentarios_vendedor,
+                       tipo_entrega, id_punto_entrega`,
+            [idUsuario, total, idDireccion, comentarios || null, tipoEntrega, idPuntoEntrega]
         );
         const pedido = pedidoRows[0];
 
@@ -115,6 +116,7 @@ const findPedidoByIdAndUsuario = async (idPedido, idUsuario) => {
     const { rows } = await pool.query(
         `SELECT
            p.id_pedido, p.id_usuario, p.fecha_pedido, p.estado, p.total,
+           p.tipo_entrega, p.id_punto_entrega,
            p.comentarios_cliente, p.comentarios_vendedor,
            json_build_object(
              'id_direccion',    d.id_direccion,
@@ -128,6 +130,11 @@ const findPedidoByIdAndUsuario = async (idPedido, idUsuario) => {
              'pais',            d.pais,
              'referencias',     d.referencias
            ) AS direccion,
+           (SELECT json_build_object(
+             'id_punto_entrega', pe.id_punto_entrega,
+             'nombre',           pe.nombre,
+             'descripcion',      pe.descripcion
+           ) FROM puntos_entrega pe WHERE pe.id_punto_entrega = p.id_punto_entrega) AS punto_entrega,
            COALESCE(
              json_agg(
                json_build_object(
@@ -169,6 +176,7 @@ const findPedidoById = async (idPedido) => {
     const { rows } = await pool.query(
         `SELECT
            p.id_pedido, p.id_usuario, p.fecha_pedido, p.estado, p.total,
+           p.tipo_entrega, p.id_punto_entrega,
            p.comentarios_cliente, p.comentarios_vendedor,
            u.nombre AS nombre_cliente, u.email AS email_cliente,
            json_build_object(
@@ -183,6 +191,11 @@ const findPedidoById = async (idPedido) => {
              'pais',            d.pais,
              'referencias',     d.referencias
            ) AS direccion,
+           (SELECT json_build_object(
+             'id_punto_entrega', pe.id_punto_entrega,
+             'nombre',           pe.nombre,
+             'descripcion',      pe.descripcion
+           ) FROM puntos_entrega pe WHERE pe.id_punto_entrega = p.id_punto_entrega) AS punto_entrega,
            COALESCE(
              json_agg(
                json_build_object(

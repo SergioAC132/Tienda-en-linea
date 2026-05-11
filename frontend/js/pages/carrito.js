@@ -1,4 +1,7 @@
 // ===== CART PAGE =====
+let _tipoEntrega   = 'envio';
+let _puntosEntrega = [];
+
 function renderCarrito() {
   if (!requireAuth(['CLIENTE'])) return;
   renderHeader();
@@ -50,6 +53,7 @@ function renderCarrito() {
     </div>
   `}).join('');
 
+  // ── Sección de entrega según tipo seleccionado ───────────────
   const addressSection = direcciones.length === 0
     ? `<div style="background:rgba(42,42,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;">
         <p style="font-size:13px;color:var(--muted-fg);">No tienes direcciones registradas</p>
@@ -66,7 +70,17 @@ function renderCarrito() {
         </button>
        </div>`;
 
-  const canOrder = direcciones.length > 0;
+  const puntoSection = _puntosEntrega.length === 0
+    ? `<div style="background:rgba(42,42,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;">
+        <p style="font-size:13px;color:var(--muted-fg);">No hay puntos de entrega disponibles en este momento</p>
+       </div>`
+    : `<select id="punto-select" style="width:100%;">
+        ${_puntosEntrega.map(p => `<option value="${p.id_punto_entrega}">${p.nombre}${p.descripcion ? ' — ' + p.descripcion : ''}</option>`).join('')}
+      </select>`;
+
+  const canOrder = _tipoEntrega === 'envio'
+    ? direcciones.length > 0
+    : _puntosEntrega.length > 0;
 
   root.innerHTML = `
     <div>
@@ -75,12 +89,35 @@ function renderCarrito() {
         <div class="cart-items">${itemsHtml}</div>
         <div class="cart-summary">
           <h3 class="summary-title">Resumen del Pedido</h3>
+
           <div>
             <label class="form-label" style="display:flex;align-items:center;gap:6px;">
-              ${Icons.MapPin(16)} Dirección de entrega
+              ${Icons.Package(16)} Tipo de entrega
             </label>
-            ${addressSection}
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <button id="tipo-envio"
+                class="btn btn-sm ${_tipoEntrega === 'envio' ? 'btn-primary' : 'btn-outline'}"
+                style="flex:1;">
+                ${Icons.Package(14)} Envío a domicilio
+              </button>
+              <button id="tipo-punto"
+                class="btn btn-sm ${_tipoEntrega === 'punto_entrega' ? 'btn-primary' : 'btn-outline'}"
+                style="flex:1;">
+                ${Icons.MapPin(14)} Punto de entrega
+              </button>
+            </div>
+            ${_tipoEntrega === 'envio'
+              ? `<label class="form-label" style="font-size:12px;color:var(--muted-fg);margin-bottom:6px;">
+                   Dirección de entrega
+                 </label>
+                 ${addressSection}`
+              : `<label class="form-label" style="font-size:12px;color:var(--muted-fg);margin-bottom:6px;">
+                   Punto de entrega
+                 </label>
+                 ${puntoSection}`
+            }
           </div>
+
           <div>
             <label class="form-label">Comentarios (opcional)</label>
             <textarea id="cart-comments" rows="3" maxlength="100" placeholder="Instrucciones especiales de entrega..."></textarea>
@@ -106,6 +143,16 @@ function renderCarrito() {
       </div>
     </div>
   `;
+
+  // ── Toggle tipo entrega ──────────────────────────────────────
+  document.getElementById('tipo-envio')?.addEventListener('click', () => {
+    _tipoEntrega = 'envio';
+    renderCarrito();
+  });
+  document.getElementById('tipo-punto')?.addEventListener('click', () => {
+    _tipoEntrega = 'punto_entrega';
+    renderCarrito();
+  });
 
   document.querySelectorAll('.cart-remove').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -158,30 +205,37 @@ function renderCarrito() {
   });
 
   document.getElementById('confirm-order')?.addEventListener('click', () => {
-    const dirId = document.getElementById('address-select')?.value || defaultDirId;
     const comentarios = commentsEl?.value || '';
-    if (!dirId) return;
-    // const pedido = AppState.crearPedido(dirId, comentarios);
-    // Nav.go(Nav.pago(pedido.id));
-
-    // Deshabilitar el botón para evitar envíos duplicados mientras procesa
     const btn = document.getElementById('confirm-order');
     btn.disabled = true;
     btn.textContent = 'Procesando...';
 
-    // Registrar el pedido en la base de datos.
-    // El total se calcula desde el carrito del localStorage, independientemente
-    // de si los productos son reales o de prueba — la API solo necesita el total.
-    Api.crearPedido({ total, id_direccion: Number(dirId), comentarios })
+    let pedidoData;
+    if (_tipoEntrega === 'punto_entrega') {
+      const puntoId = document.getElementById('punto-select')?.value;
+      if (!puntoId) {
+        btn.disabled = false;
+        btn.textContent = 'Confirmar pedido';
+        return;
+      }
+      pedidoData = { total, tipo_entrega: 'punto_entrega', id_punto_entrega: Number(puntoId), comentarios };
+    } else {
+      const dirId = document.getElementById('address-select')?.value || defaultDirId;
+      if (!dirId) {
+        btn.disabled = false;
+        btn.textContent = 'Confirmar pedido';
+        return;
+      }
+      pedidoData = { total, tipo_entrega: 'envio', id_direccion: Number(dirId), comentarios };
+    }
+
+    Api.crearPedido(pedidoData)
       .then(apiResp => {
-        // Vaciar carrito en BD (fire-and-forget; el pedido ya está creado)
         Api.vaciarCarrito().catch(() => {});
-        // Sincronizar estado local y navegar con el ID real de la BD
-        AppState.crearPedido(dirId, comentarios, apiResp.id_pedido);
+        AppState.crearPedido(pedidoData.id_direccion || null, comentarios, apiResp.id_pedido);
         Nav.go(Nav.pago(apiResp.id_pedido));
       })
       .catch(err => {
-        // Si la API falla no se avanza — el carrito queda intacto
         showToast(err.message || 'Error al crear el pedido. Intenta de nuevo.', 'error');
         btn.disabled = false;
         btn.textContent = 'Confirmar pedido';
@@ -204,10 +258,13 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     .catch(() => {});
 
-  // Sincronizar carrito desde la BD para reflejar cambios de otras sesiones
   const cargarCarrito = Api.getCarrito()
     .then(data => AppState.setCarritoFromApi(data.items))
     .catch(() => {});
 
-  Promise.all([cargarDirecciones, cargarCarrito]).finally(() => renderCarrito());
+  const cargarPuntos = Api.getPuntosEntrega()
+    .then(data => { _puntosEntrega = Array.isArray(data) ? data : []; })
+    .catch(() => {});
+
+  Promise.all([cargarDirecciones, cargarCarrito, cargarPuntos]).finally(() => renderCarrito());
 });

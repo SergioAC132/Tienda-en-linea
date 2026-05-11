@@ -824,6 +824,17 @@ input::-webkit-contacts-auto-fill-button { display: none !important; }
 .size-toggle:hover { border-color: rgba(212,175,55,0.5); }
 .size-toggle.selected { border-color: var(--primary); background: rgba(212,175,55,0.1); color: var(--primary); }
 
+/* ===== STOCK POR TALLA ===== */
+.stock-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.stock-row:last-child { border-bottom: none; }
+.stock-talla-name { font-size: 13px; font-weight: 500; min-width: 40px; }
+.stock-unit { font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+.stock-input, .stock-input-modal {
+  width: 80px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font-size: 13px; text-align: right;
+}
+.stock-input:focus, .stock-input-modal:focus { border-color: var(--primary); outline: none; }
+
 /* ===== PUBLISH TOGGLE ===== */
 .publish-row {
   display: flex;

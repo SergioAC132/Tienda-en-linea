@@ -15,14 +15,14 @@ const Router = {
   },
 
   // Protected routes: redirect to login if no user
-  protectedRoutes: ['catalogo','producto','carrito','pago','pedidos','dashboard','admin','catalogo-vendedor'],
+  protectedRoutes: ['carrito','pago','pedidos','dashboard','admin','catalogo-vendedor'],
 
   navigate(route) {
     window.location.hash = route;
   },
 
   render() {
-    const hash = window.location.hash.replace('#', '') || 'login';
+    const hash = window.location.hash.replace('#', '') || 'catalogo';
     const parts = hash.split('/');
     const page = parts[0];
     const param = parts[1];
@@ -78,7 +78,7 @@ const Router = {
       appRoot.innerHTML = `
         <div class="empty-state">
           <h2>Página no encontrada</h2>
-          <button class="btn btn-primary" onclick="App.navigate('login')">Ir al inicio</button>
+          <button class="btn btn-primary" onclick="App.navigate('catalogo')">Ir al inicio</button>
         </div>
       `;
     }

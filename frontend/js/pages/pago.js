@@ -49,7 +49,7 @@ function renderPago() {
     Api.getMetodosPago(),
   ])
     .then(([pedido, metodos]) => {
-      if (pedido.estado !== 'pendiente') {
+      if (pedido.estado !== 'pendiente' && pedido.estado !== 'esperando_pago') {
         mostrarError(root, 'Este pedido ya no está disponible para registrar pago.');
         return;
       }
@@ -57,8 +57,27 @@ function renderPago() {
       _pedido  = pedido;
       _metodos = metodos;
 
+      if (pedido.estado === 'esperando_pago') {
+        return Api.getPagoByPedido(pedidoId)
+          .then(pago => {
+            if (pago?.metodo_pago === 'link_pago' && pago?.url_pago) {
+              limpiarEstado();
+              window.location.href = pago.url_pago;
+            } else if (pago?.metodo_pago === 'transferencia') {
+              _pago             = pago;
+              _selectedMetodoId = Number(pago.id_metodo_pago);
+              renderFormulario(root);
+            } else {
+              renderEstadoPago(root, pago);
+            }
+          })
+          .catch(() => renderEstadoPago(root, null));
+      }
+
       if (!_selectedMetodoId && _metodos.length > 0) {
-        _selectedMetodoId = Number(_metodos[0].id_metodo_pago);
+        const tipoEntrega = pedido.tipo_entrega || 'envio';
+        const visibles = _metodos.filter(m => tipoEntrega === 'punto_entrega' || m.nombre !== 'efectivo');
+        _selectedMetodoId = Number((visibles[0] || _metodos[0]).id_metodo_pago);
       }
 
       renderFormulario(root);
@@ -95,10 +114,18 @@ function renderFormulario(root) {
         </div>`).join('')
     : `<p style="font-size:13px;color:var(--muted-fg);">Sin detalle de productos disponible</p>`;
 
-  // ── Dirección de entrega ─────────────────────────────────────
-  const dir = pedido.direccion;
-  let direccionHtml;
-  if (dir && dir.calle) {
+  // ── Entrega: dirección o punto ───────────────────────────────
+  const tipoEntrega = pedido.tipo_entrega || 'envio';
+  const dir         = pedido.direccion;
+  const punto       = pedido.punto_entrega;
+  let entregaLabel, entregaHtml;
+
+  if (tipoEntrega === 'punto_entrega' && punto?.nombre) {
+    entregaLabel = 'Punto de entrega';
+    entregaHtml  = `
+      <p style="font-size:13px;font-weight:500;">${punto.nombre}</p>
+      ${punto.descripcion ? `<p style="font-size:12px;color:var(--muted-fg);margin-top:2px;">${punto.descripcion}</p>` : ''}`;
+  } else if (dir && dir.calle) {
     const numero   = dir.numero_exterior ? ` #${dir.numero_exterior}` : '';
     const interior = dir.numero_interior ? ` Int. ${dir.numero_interior}` : '';
     const linea1   = `${dir.calle}${numero}${interior}`;
@@ -107,17 +134,26 @@ function renderFormulario(root) {
       `${dir.ciudad}, ${dir.estado}`,
       dir.codigo_postal ? `CP ${dir.codigo_postal}` : '',
     ].filter(Boolean).join(' · ');
-    direccionHtml = `
+    entregaLabel = 'Dirección de entrega';
+    entregaHtml  = `
       <p style="font-size:13px;">${linea1}</p>
       <p style="font-size:12px;color:var(--muted-fg);margin-top:2px;">${linea2}</p>`;
   } else {
-    direccionHtml = `<p style="font-size:13px;color:var(--muted-fg);">Dirección no disponible</p>`;
+    entregaLabel = 'Entrega';
+    entregaHtml  = `<p style="font-size:13px;color:var(--muted-fg);">Información no disponible</p>`;
   }
 
   // ── Botones de selección de método ──────────────────────────
-  // Una vez generada la referencia (paso 2) los botones se deshabilitan
+  // efectivo solo disponible para pedidos con tipo_entrega = punto_entrega
   const metodosBloqueados = !!_pago;
-  const metodoBtns = _metodos.map(m => {
+  const metodosVisibles   = _metodos.filter(m => tipoEntrega === 'punto_entrega' || m.nombre !== 'efectivo');
+
+  // Si el método seleccionado ya no es visible, resetear al primero visible
+  if (metodosVisibles.length > 0 && !metodosVisibles.find(m => Number(m.id_metodo_pago) === _selectedMetodoId)) {
+    _selectedMetodoId = Number(metodosVisibles[0].id_metodo_pago);
+  }
+
+  const metodoBtns = metodosVisibles.map(m => {
     const info   = METODO_INFO[m.nombre] || { icon: () => Icons.CreditCard(24), titulo: m.nombre, desc: '' };
     const activo = _selectedMetodoId === Number(m.id_metodo_pago);
     return `
@@ -133,7 +169,7 @@ function renderFormulario(root) {
   }).join('');
 
   // ── Sección extra según método y paso actual ─────────────────
-  const metodoSel = _metodos.find(m => Number(m.id_metodo_pago) === _selectedMetodoId);
+  const metodoSel = metodosVisibles.find(m => Number(m.id_metodo_pago) === _selectedMetodoId);
   let extraHtml   = '';
   let btnLabel    = 'Confirmar pago';
 
@@ -144,10 +180,10 @@ function renderFormulario(root) {
       extraHtml = `
         <div class="bank-info" style="margin-bottom:20px;">
           <h4 style="font-weight:500;margin-bottom:10px;">Datos Bancarios</h4>
-          <p><span>Banco:</span> Banco Nacional</p>
-          <p><span>Cuenta:</span> 1234567890</p>
-          <p><span>CLABE:</span> 012345678901234567</p>
-          <p><span>Titular:</span> Tintin Luxury S.A. de C.V.</p>
+          <p><span>Banco:</span> Banorte</p>
+          <p><span>Cuenta:</span> 828490045</p>
+          <p><span>CLABE:</span> 08284900451234567</p>
+          <p><span>Titular:</span>Jesús Robles Martínez</p>
           <p style="margin-top:8px;font-size:12px;color:var(--muted-fg);">
             Al continuar se generará tu número de referencia único para la transferencia.
           </p>
@@ -172,10 +208,10 @@ function renderFormulario(root) {
       extraHtml = `
         <div class="bank-info" style="margin-bottom:20px;">
           <h4 style="font-weight:500;margin-bottom:10px;">Datos Bancarios</h4>
-          <p><span>Banco:</span> Banco Nacional</p>
-          <p><span>Cuenta:</span> 1234567890</p>
-          <p><span>CLABE:</span> 012345678901234567</p>
-          <p><span>Titular:</span> Tintin Luxury S.A. de C.V.</p>
+          <p><span>Banco:</span> Banorte</p>
+          <p><span>Cuenta:</span> 828490045</p>
+          <p><span>CLABE:</span> 0828490045123456</p>
+          <p><span>Titular:</span> Jesús Robles Martínez</p>
           <div style="margin-top:12px;padding:14px 16px;background:color-mix(in srgb,var(--primary) 8%,transparent);border-radius:8px;border:1px solid var(--border);">
             <p style="font-size:12px;color:var(--muted-fg);margin-bottom:4px;">Tu referencia de transferencia</p>
             <p style="font-size:26px;font-weight:700;color:var(--primary);letter-spacing:4px;margin:0;">${_pago.referencia}</p>
@@ -216,8 +252,8 @@ function renderFormulario(root) {
             <span class="total-amount">$${formatCurrency(pedido.total)} MXN</span>
           </div>
           <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-            <p style="font-size:12px;color:var(--muted-fg);margin-bottom:6px;">Dirección de entrega</p>
-            ${direccionHtml}
+            <p style="font-size:12px;color:var(--muted-fg);margin-bottom:6px;">${entregaLabel}</p>
+            ${entregaHtml}
           </div>
         </div>
 
@@ -237,7 +273,7 @@ function renderFormulario(root) {
   // ── Event listeners ──────────────────────────────────────────
   document.querySelectorAll('.payment-method-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (_pago) return; // bloqueado tras generar referencia
+      if (_pago) return;
       _selectedMetodoId = Number(btn.dataset.metodoId);
       renderFormulario(root);
     });
@@ -307,6 +343,9 @@ async function manejarRegistroPago(root) {
       // Guardar el pago creado y re-renderizar para mostrar la referencia
       _pago = pago;
       renderFormulario(root);
+    } else if (metodoSel?.nombre === 'efectivo' && _pedido.tipo_entrega === 'punto_entrega') {
+      limpiarEstado();
+      mostrarConfirmacionPuntoEntrega(root);
     } else {
       showToast('Pago registrado exitosamente');
       limpiarEstado();
@@ -319,6 +358,93 @@ async function manejarRegistroPago(root) {
       btn.textContent = metodoSel?.nombre === 'transferencia' ? 'Obtener referencia de pago' : 'Confirmar pago';
     }
   }
+}
+
+
+/**
+ * Muestra el estado del pago existente para un pedido en 'esperando_pago'.
+ * Si el pago fue rechazado, indica que puede contactar al vendedor.
+ */
+function renderEstadoPago(root, pago) {
+  const pedido       = _pedido;
+  const nombreMetodo = METODO_INFO[pago?.metodo_pago]?.titulo || pago?.metodo_pago || '—';
+  const referencia   = pago?.referencia;
+  const rechazado    = pago?.estado_pago === 'rechazado';
+
+  const mensajeHtml = rechazado
+    ? `<div style="padding:14px 16px;background:color-mix(in srgb,var(--destructive) 8%,transparent);
+                   border-radius:8px;border:1px solid color-mix(in srgb,var(--destructive) 30%,transparent);
+                   margin-bottom:20px;">
+         <p style="font-size:14px;font-weight:500;color:var(--destructive);margin-bottom:4px;">Pago rechazado</p>
+         <p style="font-size:13px;color:var(--muted-fg);">
+           Tu pago fue rechazado. Contacta al vendedor para más información o para reintentar.
+         </p>
+       </div>`
+    : `<div style="padding:14px 16px;background:color-mix(in srgb,var(--primary) 8%,transparent);
+                   border-radius:8px;border:1px solid var(--border);margin-bottom:20px;">
+         <p style="font-size:14px;font-weight:500;margin-bottom:4px;">Pago en revisión</p>
+         <p style="font-size:13px;color:var(--muted-fg);">
+           Tu pago está siendo revisado. Te notificaremos cuando sea confirmado.
+         </p>
+       </div>`;
+
+  root.innerHTML = `
+    <div class="payment-layout">
+      <div class="payment-inner">
+        <div class="payment-header">
+          ${Icons.CheckCircle2(32)}
+          <div>
+            <h2>Pedido Confirmado</h2>
+            <p style="color:var(--muted-fg);">#${pedido.id_pedido}</p>
+          </div>
+        </div>
+        <div class="card card-body">
+          <h3 style="font-family:var(--font-serif);font-size:20px;margin-bottom:20px;">Estado del Pago</h3>
+          ${mensajeHtml}
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+            <div class="summary-row">
+              <span style="color:var(--muted-fg);">Método</span>
+              <span>${nombreMetodo}</span>
+            </div>
+            <div class="summary-row">
+              <span style="color:var(--muted-fg);">Total</span>
+              <span class="total-amount">$${formatCurrency(pedido.total)} MXN</span>
+            </div>
+            ${referencia ? `
+            <div class="summary-row">
+              <span style="color:var(--muted-fg);">Referencia</span>
+              <span style="font-weight:600;letter-spacing:2px;">${referencia}</span>
+            </div>` : ''}
+          </div>
+          <button class="btn btn-ghost" style="margin-top:24px;" onclick="Nav.go(Nav.pedidos)">
+            Ver mis pedidos
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+
+function mostrarConfirmacionPuntoEntrega(root) {
+  root.innerHTML = `
+    <div class="payment-layout">
+      <div class="payment-inner">
+        <div class="payment-header">
+          ${Icons.CheckCircle2(32)}
+          <div>
+            <h2>¡Pedido Confirmado!</h2>
+          </div>
+        </div>
+        <div class="card card-body" style="text-align:center;padding:32px 24px;">
+          <p style="font-size:15px;line-height:1.6;margin-bottom:8px;">
+            Pronto nos pondremos en contacto contigo para confirmar la fecha y hora de entrega del pedido.
+          </p>
+          <button class="btn btn-ghost" style="margin-top:24px;" onclick="Nav.go(Nav.pedidos)">
+            Ver mis pedidos
+          </button>
+        </div>
+      </div>
+    </div>`;
 }
 
 
