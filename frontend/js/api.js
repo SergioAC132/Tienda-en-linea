@@ -242,6 +242,14 @@ const Api = {
    * @param {string} comentario - Texto de la nota interna (máximo 100 caracteres)
    * @returns {Object} El pedido con el comentario actualizado
    */
+  async programarEntrega(idPedido, fechaHoraEntrega) {
+    return await this._req(`/pedidos/${idPedido}/programar-entrega`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha_hora_entrega: fechaHoraEntrega }),
+    });
+  },
+
   async actualizarComentarioPedido(idPedido, comentario) {
     const token = AppState.getToken();
     const res = await fetch(`${API_URL}/pedidos/${idPedido}/comentario`, {

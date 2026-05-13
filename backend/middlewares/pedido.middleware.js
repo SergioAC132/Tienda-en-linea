@@ -6,17 +6,19 @@
 // ─────────────────────────────────────────────────────────────
 
 // Estados permitidos según el ENUM definido en la base de datos
-const ESTADOS_VALIDOS = ['pendiente', 'esperando_pago', 'pagado', 'entregado', 'cancelado'];
+const ESTADOS_VALIDOS = ['pendiente', 'pendiente_programacion', 'esperando_pago', 'esperando_dia_entrega', 'pagado', 'entregado', 'cancelado'];
 
 // Mapa de transiciones permitidas por estado actual.
-// Si necesitas habilitar una transición adicional (ej. pagado → esperando_pago),
-// solo agrégala al array correspondiente sin tocar el resto del middleware.
+// Nota: pendiente_programacion → esperando_dia_entrega se gestiona exclusivamente
+// a través de PATCH /:id/programar-entrega (requiere fecha_hora_entrega).
 const TRANSICIONES_VALIDAS = {
-  pendiente:      ['esperando_pago', 'cancelado'],
-  esperando_pago: ['pagado', 'cancelado'],
-  pagado:         ['entregado', 'cancelado'],
-  entregado:      [],
-  cancelado:      []
+  pendiente:              ['esperando_pago', 'cancelado'],
+  pendiente_programacion: ['cancelado'],
+  esperando_pago:         ['pagado', 'cancelado'],
+  esperando_dia_entrega:  ['entregado', 'cancelado'],
+  pagado:                 ['entregado', 'cancelado'],
+  entregado:              [],
+  cancelado:              []
 };
 
 

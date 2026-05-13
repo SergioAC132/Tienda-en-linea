@@ -28,7 +28,7 @@ const generarLinkPago = async (idPedido, monto) => {
                 default: `${appUrl}/views/pedidos.html`,
             },
             custom_payment_options: {
-                payment_method_types: [`credit`, `cash`]
+                payment_method_types: [`credit`, `debit`, `cash`]
             },
             expires_at: new Date(Date.now() + 3600 * 24000).toISOString(),
             metadata: {

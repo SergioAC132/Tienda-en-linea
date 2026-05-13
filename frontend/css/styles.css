@@ -867,3 +867,22 @@ input::-webkit-contacts-auto-fill-button { display: none !important; }
   .orders-table { font-size: 12px; }
   .orders-table th, .orders-table td { padding: 8px; }
 }
+
+
+.instagram-link a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #8a8a8a;
+  text-decoration: none;
+}
+
+.instagram-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.instagram-link a:hover {
+  color: #6f6f6f;
+}

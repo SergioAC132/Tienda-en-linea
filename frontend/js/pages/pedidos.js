@@ -134,7 +134,9 @@ function renderTarjetaPedido(pedido) {
     </div>` : '';
 
   // Botones de acción: disponibles según estado del pedido.
-  // 'pendiente': registrar pago y cancelar. 'esperando_pago': ir a ver el pago.
+  // 'pendiente': registrar pago y cancelar.
+  // 'pendiente_programacion': solo cancelar (pago en efectivo, esperando que el vendedor programe).
+  // 'esperando_pago': ir a ver el pago.
   const botonesAccionHtml =
     pedido.estado === 'pendiente' ? `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
@@ -142,6 +144,17 @@ function renderTarjetaPedido(pedido) {
                 data-id="${idMostrar}">
           Registrar pago
         </button>
+        <button class="btn btn-outline btn-sm btn-cancelar-pedido"
+                data-id="${idMostrar}"
+                style="color:var(--destructive);border-color:var(--destructive);">
+          Cancelar pedido
+        </button>
+      </div>` :
+    pedido.estado === 'pendiente_programacion' ? `
+      <div style="margin-top:16px;">
+        <p style="font-size:12px;color:var(--muted-fg);margin-bottom:10px;">
+          Tu pago en efectivo fue registrado. El vendedor coordinará contigo la fecha de entrega.
+        </p>
         <button class="btn btn-outline btn-sm btn-cancelar-pedido"
                 data-id="${idMostrar}"
                 style="color:var(--destructive);border-color:var(--destructive);">
@@ -240,6 +253,18 @@ function abrirDetallePedidoCliente(pedido) {
       </div>`;
   };
 
+  // ── Punto de entrega ─────────────────────────────────────────
+  const buildPuntoEntregaHtml = punto => {
+    if (!punto || !punto.nombre) {
+      return `<p style="color:var(--muted-fg);font-size:13px;">No disponible</p>`;
+    }
+    return `
+      <div style="background:rgba(42,42,42,.4);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;">
+        <p style="font-weight:500;">${punto.nombre}</p>
+        ${punto.descripcion ? `<p style="color:var(--muted-fg);">${punto.descripcion}</p>` : ''}
+      </div>`;
+  };
+
   // ── Productos ────────────────────────────────────────────────
   const buildItemsHtml = items => {
     if (!items || items.length === 0) {
@@ -272,9 +297,10 @@ function abrirDetallePedidoCliente(pedido) {
     }).join('');
   };
 
-  const itemsIniciales    = pedido.items || pedido.detalles || [];
-  const esPendiente       = pedido.estado === 'pendiente';
-  const esEsperandoPago   = pedido.estado === 'esperando_pago';
+  const itemsIniciales         = pedido.items || pedido.detalles || [];
+  const esPendiente            = pedido.estado === 'pendiente';
+  const esPendienteProgramacion = pedido.estado === 'pendiente_programacion';
+  const esEsperandoPago        = pedido.estado === 'esperando_pago';
 
   // ── Modal ────────────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -311,10 +337,10 @@ function abrirDetallePedidoCliente(pedido) {
           <div id="detalle-cli-items">${buildItemsHtml(itemsIniciales)}</div>
         </div>
 
-        <!-- Dirección -->
+        <!-- Entrega -->
         <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-          <p class="order-section-title">${Icons.MapPin(16)} Dirección de entrega</p>
-          <div id="detalle-cli-dir">${buildDireccionHtml(pedido.direccion)}</div>
+          <p class="order-section-title" id="detalle-cli-entrega-titulo">${Icons.MapPin(16)} Entrega</p>
+          <div id="detalle-cli-entrega"><p style="color:var(--muted-fg);font-size:13px;">Cargando...</p></div>
         </div>
 
         <!-- Comentarios -->
@@ -337,6 +363,11 @@ function abrirDetallePedidoCliente(pedido) {
           <button class="btn btn-primary" id="btn-detalle-cli-pago">
             Registrar pago
           </button>
+          <button class="btn btn-outline" id="btn-detalle-cli-cancelar"
+                  style="color:var(--destructive);border-color:var(--destructive);">
+            Cancelar pedido
+          </button>` : ''}
+        ${esPendienteProgramacion ? `
           <button class="btn btn-outline" id="btn-detalle-cli-cancelar"
                   style="color:var(--destructive);border-color:var(--destructive);">
             Cancelar pedido
@@ -369,6 +400,13 @@ function abrirDetallePedidoCliente(pedido) {
     });
   }
 
+  if (esPendienteProgramacion) {
+    document.getElementById('btn-detalle-cli-cancelar').addEventListener('click', () => {
+      cerrar();
+      cancelarPedido(idMostrar);
+    });
+  }
+
   if (esEsperandoPago) {
     document.getElementById('btn-detalle-cli-ver-pago').addEventListener('click', () => {
       cerrar();
@@ -376,21 +414,51 @@ function abrirDetallePedidoCliente(pedido) {
     });
   }
 
-  // Cargar el detalle completo desde la API: productos y dirección
+  // Cargar el detalle completo desde la API: productos, entrega y fecha programada
   if (!isNaN(Number(idMostrar))) {
     Api.getPedidoById(Number(idMostrar))
       .then(data => {
         const items = data.items || data.detalles || data.detalle_pedidos || [];
-        if (items.length > 0) {
-          const container = document.getElementById('detalle-cli-items');
-          if (container) container.innerHTML = buildItemsHtml(items);
+        const itemsContainer = document.getElementById('detalle-cli-items');
+        if (itemsContainer && items.length > 0) {
+          itemsContainer.innerHTML = buildItemsHtml(items);
         }
-        if (data.direccion) {
-          const dirContainer = document.getElementById('detalle-cli-dir');
-          if (dirContainer) dirContainer.innerHTML = buildDireccionHtml(data.direccion);
+
+        const entregaContainer = document.getElementById('detalle-cli-entrega');
+        const entregaTitulo    = document.getElementById('detalle-cli-entrega-titulo');
+        if (entregaContainer) {
+          if (data.tipo_entrega === 'punto_entrega') {
+            if (entregaTitulo) entregaTitulo.innerHTML = `${Icons.MapPin(16)} Punto de entrega`;
+            entregaContainer.innerHTML = buildPuntoEntregaHtml(data.punto_entrega);
+          } else {
+            if (entregaTitulo) entregaTitulo.innerHTML = `${Icons.MapPin(16)} Dirección de entrega`;
+            entregaContainer.innerHTML = buildDireccionHtml(data.direccion);
+          }
+        }
+
+        if (data.fecha_hora_entrega) {
+          const fecha = new Date(data.fecha_hora_entrega);
+          const fechaFmt = fecha.toLocaleString('es-MX', {
+            weekday: 'long', year: 'numeric', month: 'long',
+            day: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+          const entregaDiv = entregaContainer?.closest('div[style*="border-top"]');
+          if (entregaDiv && !entregaDiv.querySelector('#detalle-cli-fecha-entrega')) {
+            const fechaEl = document.createElement('div');
+            fechaEl.id = 'detalle-cli-fecha-entrega';
+            fechaEl.style.cssText = 'margin-top:10px;font-size:13px;';
+            fechaEl.innerHTML = `<span class="form-label">Fecha de entrega programada</span>
+              <p style="margin-top:4px;color:var(--primary);">${fechaFmt}</p>`;
+            entregaDiv.appendChild(fechaEl);
+          }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        const entregaContainer = document.getElementById('detalle-cli-entrega');
+        if (entregaContainer) {
+          entregaContainer.innerHTML = `<p style="color:var(--muted-fg);font-size:13px;">No disponible</p>`;
+        }
+      });
   }
 }
 

@@ -232,7 +232,7 @@ function renderCarrito() {
     Api.crearPedido(pedidoData)
       .then(apiResp => {
         Api.vaciarCarrito().catch(() => {});
-        AppState.crearPedido(pedidoData.id_direccion || null, comentarios, apiResp.id_pedido);
+        AppState.limpiarCarrito();
         Nav.go(Nav.pago(apiResp.id_pedido));
       })
       .catch(err => {

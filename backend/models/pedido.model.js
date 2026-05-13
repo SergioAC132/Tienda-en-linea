@@ -116,7 +116,7 @@ const findPedidoByIdAndUsuario = async (idPedido, idUsuario) => {
     const { rows } = await pool.query(
         `SELECT
            p.id_pedido, p.id_usuario, p.fecha_pedido, p.estado, p.total,
-           p.tipo_entrega, p.id_punto_entrega,
+           p.tipo_entrega, p.id_punto_entrega, p.fecha_hora_entrega,
            p.comentarios_cliente, p.comentarios_vendedor,
            json_build_object(
              'id_direccion',    d.id_direccion,
@@ -178,7 +178,8 @@ const findPedidoById = async (idPedido) => {
            p.id_pedido, p.id_usuario, p.fecha_pedido, p.estado, p.total,
            p.tipo_entrega, p.id_punto_entrega,
            p.comentarios_cliente, p.comentarios_vendedor,
-           u.nombre AS nombre_cliente, u.email AS email_cliente,
+           u.nombre AS nombre_cliente, u.email AS email_cliente, u.telefono AS telefono_cliente,
+           p.fecha_hora_entrega,
            json_build_object(
              'id_direccion',    d.id_direccion,
              'calle',           d.calle,
@@ -219,7 +220,7 @@ const findPedidoById = async (idPedido) => {
          LEFT JOIN imagen_producto img ON img.id_producto = dp.id_producto
                                      AND img.orden = 1
          WHERE p.id_pedido = $1
-         GROUP BY p.id_pedido, u.nombre, u.email, d.id_direccion`,
+         GROUP BY p.id_pedido, u.nombre, u.email, u.telefono, d.id_direccion`,
         [idPedido]
     );
     return rows[0] || null;
@@ -299,7 +300,7 @@ const cancelarPedido = async (idPedido, idUsuario) => {
              SET estado = 'cancelado'
              WHERE id_pedido = $1
                AND id_usuario = $2
-               AND estado = 'pendiente'
+               AND estado IN ('pendiente', 'pendiente_programacion')
              RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
                        comentarios_cliente, comentarios_vendedor`,
             [idPedido, idUsuario]
@@ -387,6 +388,28 @@ const findTopProductos = async () => {
 };
 
 
+/**
+ * Asigna fecha y hora de entrega a un pedido en 'pendiente_programacion'
+ * y avanza automáticamente su estado a 'esperando_dia_entrega'.
+ * Solo lo puede ejecutar Vendedor o Admin.
+ *
+ * @param {number} idPedido         - ID del pedido a programar
+ * @param {string} fechaHoraEntrega - Fecha y hora ISO 8601
+ * @returns {Object|null} El pedido actualizado, o null si no aplica
+ */
+const programarEntrega = async (idPedido, fechaHoraEntrega) => {
+    const { rows } = await pool.query(
+        `UPDATE pedidos
+         SET fecha_hora_entrega = $1, estado = 'esperando_dia_entrega'
+         WHERE id_pedido = $2 AND estado = 'pendiente_programacion'
+         RETURNING id_pedido, id_usuario, fecha_pedido, estado, total,
+                   fecha_hora_entrega, comentarios_cliente, comentarios_vendedor`,
+        [fechaHoraEntrega, idPedido]
+    );
+    return rows[0] || null;
+};
+
+
 module.exports = {
     createPedido,
     findPedidosByUsuario,
@@ -397,4 +420,5 @@ module.exports = {
     updateComentarioVendedor,
     cancelarPedido,
     findTopProductos,
+    programarEntrega,
 };

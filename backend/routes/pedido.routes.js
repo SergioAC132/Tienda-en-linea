@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, agregarComentario, getTopProductos } = require('../controllers/pedido.controller');
+const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, agregarComentario, getTopProductos, programarEntregaHandler } = require('../controllers/pedido.controller');
 
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
 const { validarCrearPedido, validarActualizarEstado, validarComentario } = require('../middlewares/pedido.middleware');
@@ -62,6 +62,13 @@ router.patch( '/:id/cancelar', verificarToken, verificarRol('CLIENTE'), cancelar
 // No modifica el estado — solo actualiza comentarios_vendedor.
 // Solo Vendedor y Admin tienen este permiso.
 router.patch( '/:id/comentario', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), validarComentario, agregarComentario );
+
+
+// PATCH /api/pedidos/:id/programar-entrega
+// Asigna fecha y hora de entrega a un pedido en 'pendiente_programacion'.
+// Avanza automáticamente el estado a 'esperando_dia_entrega'.
+// Solo Vendedor y Admin tienen este permiso.
+router.patch( '/:id/programar-entrega', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), programarEntregaHandler );
 
 
 module.exports = router;

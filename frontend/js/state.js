@@ -254,8 +254,10 @@ const AppState = (function () {
      * @returns {Object} El pedido local recién creado
      */
     crearPedido(direccionId, comentarios, idPedidoDB) {
-      const dir = s.direcciones.find(d => d.id === direccionId);
-      if (!dir || !s.currentUser) throw new Error('Error al crear pedido');
+      if (!s.currentUser) throw new Error('Error al crear pedido');
+      const dir = direccionId != null
+        ? s.direcciones.find(d => String(d.id) === String(direccionId))
+        : null;
       const items = s.carrito.map(i => ({ productoId: i.productoId, nombre: i.nombre, imagenUrl: i.imagenUrl, talla: i.talla, cantidad: i.cantidad, subtotal: i.precio_base * i.cantidad }));
       const total = items.reduce((n, i) => n + i.subtotal, 0);
       const id = `PED-${String(s.pedidos.length + 1).padStart(3, '0')}`;

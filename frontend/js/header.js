@@ -49,27 +49,34 @@ function renderHeader() {
 
   root.innerHTML = `
     <header>
-      <div class="header-inner">
-        <a class="header-logo" href="${user.rol === 'CLIENTE' ? Nav.catalogo : Nav.dashboard}">
-          Tintin <span>Luxury</span>
-        </a>
-        <nav class="header-nav">
-          ${navLinks}
-          <div class="header-user">
-            <div class="user-menu" id="user-menu">
-              <button class="user-menu-trigger" id="user-menu-trigger">
-                ${Icons.User(20)}
-                <span>${user.nombre}</span>
-                ${Icons.ArrowDown(14)}
-              </button>
-              <div class="user-dropdown" id="user-dropdown">
-                ${user.rol === 'CLIENTE' ? `<a href="${Nav.direcciones}">${Icons.MapPin(16)} Mis Direcciones</a>` : ''}
-                <button id="logout-btn">${Icons.LogOut(16)} Cerrar sesión</button>
+        <div class="header-inner">
+          <div>
+            <a class="header-logo" href="${user.rol === 'CLIENTE' ? Nav.catalogo : Nav.dashboard}">
+              Tintin <span>Luxury</span>
+            </a>
+            <p class="instagram-link">
+              <a href="https://www.instagram.com/tintinluxury/"   target="_blank" rel="noopener noreferrer" >
+                ${Icons.Instagram(16)}@tintin_luxury
+              </a>
+            </p>
+          </div>
+          <nav class="header-nav">
+            ${navLinks}
+            <div class="header-user">
+              <div class="user-menu" id="user-menu">
+                <button class="user-menu-trigger" id="user-menu-trigger">
+                  ${Icons.User(20)}
+                  <span>${user.nombre}</span>
+                  ${Icons.ArrowDown(14)}
+                </button>
+                <div class="user-dropdown" id="user-dropdown">
+                  ${user.rol === 'CLIENTE' ? `<a href="${Nav.direcciones}">${Icons.MapPin(16)} Mis Direcciones</a>` : ''}
+                  <button id="logout-btn">${Icons.LogOut(16)} Cerrar sesión</button>
+                </div>
               </div>
             </div>
-          </div>
-        </nav>
-      </div>
+          </nav>
+        </div>
     </header>
   `;
 

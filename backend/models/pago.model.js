@@ -98,10 +98,13 @@ const createPago = async (idPedido, idUsuario, idMetodoPago, extras = {}) => {
             [idPedido, idMetodoPago, referencia, monto, urlPago]
         );
 
-        // 5. Avanzar el pedido a 'esperando_pago'
+        // 5. Avanzar el pedido según el método:
+        //    efectivo → pendiente_programacion (el vendedor programa la entrega)
+        //    otros    → esperando_pago (flujo normal de confirmación de pago)
+        const nuevoEstadoPedido = nombreMetodo === 'efectivo' ? 'pendiente_programacion' : 'esperando_pago';
         await client.query(
-            `UPDATE pedidos SET estado = 'esperando_pago' WHERE id_pedido = $1`,
-            [idPedido]
+            `UPDATE pedidos SET estado = $1 WHERE id_pedido = $2`,
+            [nuevoEstadoPedido, idPedido]
         );
 
         await client.query('COMMIT');
@@ -341,18 +344,21 @@ const findPedidoTotal = async (idPedido, idUsuario) => {
  */
 const confirmarPagoPorReferencia = async (referencia) => {
     const client = await pool.connect();
+
     try {
         await client.query('BEGIN');
 
+        // 1. Confirmar pago SOLO si aún no está confirmado
         const { rows } = await client.query(
             `UPDATE pagos
-             SET estado_pago = 'confirmado', fecha_confirmacion = NOW()
-             WHERE referencia = $1 AND estado_pago = 'pendiente'
-             RETURNING id_pago, id_pedido, id_metodo_pago, estado_pago,
-                       fecha_registro, fecha_confirmacion, referencia,
-                       comprobante_pago, url_pago, monto`,
+             SET estado_pago = 'confirmado',
+                 fecha_confirmacion = NOW()
+             WHERE referencia = $1
+               AND estado_pago != 'confirmado'
+             RETURNING id_pago, id_pedido, referencia`,
             [referencia]
         );
+
         const pago = rows[0];
 
         if (!pago) {
@@ -360,13 +366,18 @@ const confirmarPagoPorReferencia = async (referencia) => {
             return null;
         }
 
+        // 2. Actualizar pedido a pagado
         await client.query(
-            `UPDATE pedidos SET estado = 'pagado' WHERE id_pedido = $1`,
+            `UPDATE pedidos
+             SET estado = 'pagado'
+             WHERE id_pedido = $1`,
             [pago.id_pedido]
         );
 
         await client.query('COMMIT');
+
         return pago;
+
     } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -374,7 +385,6 @@ const confirmarPagoPorReferencia = async (referencia) => {
         client.release();
     }
 };
-
 
 module.exports = {
     createPago,

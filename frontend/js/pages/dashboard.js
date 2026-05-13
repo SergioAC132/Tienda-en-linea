@@ -54,7 +54,7 @@ function renderDashboardContent() {
 
   // Pedidos activos: todo lo que no está entregado ni cancelado
   const pedidosActivos = pedidos.filter(p =>
-    ['pendiente', 'esperando_pago', 'pagado'].includes(p.estado)
+    ['pendiente', 'pendiente_programacion', 'esperando_pago', 'esperando_dia_entrega', 'pagado'].includes(p.estado)
   );
 
   // Primer día del mes actual para filtrar métricas del mes
@@ -193,10 +193,12 @@ function renderDashboardContent() {
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
           <h3 style="font-family:var(--font-serif);font-size:20px;margin:0;">Pedidos Activos</h3>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <select id="filtro-estado" style="width:auto;min-width:160px;">
+            <select id="filtro-estado" style="width:auto;min-width:190px;">
               <option value="">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
+              <option value="pendiente_programacion">Pendiente de programación</option>
               <option value="esperando_pago">Esperando pago</option>
+              <option value="esperando_dia_entrega">Esperando día de entrega</option>
               <option value="pagado">Pagado</option>
             </select>
             <div style="display:flex;align-items:center;gap:6px;">
@@ -292,9 +294,11 @@ function renderFilasPedidos(pedidos) {
 
   // Etiquetas de encabezado para cada grupo de estado
   const ETIQUETAS_GRUPO = {
-    pendiente:      'Pendiente',
-    esperando_pago: 'Esperando pago',
-    pagado:         'Pagado'
+    pendiente:              'Pendiente',
+    pendiente_programacion: 'Pendiente de programación',
+    esperando_pago:         'Esperando pago',
+    esperando_dia_entrega:  'Esperando día de entrega',
+    pagado:                 'Pagado'
   };
 
   // Si hay filtro de estado activo, mostrar lista plana sin encabezados de grupo
@@ -303,8 +307,8 @@ function renderFilasPedidos(pedidos) {
   let html = '';
 
   if (conAgrupacion) {
-    // Agrupar en orden: pendiente → esperando_pago → pagado
-    ['pendiente', 'esperando_pago', 'pagado'].forEach(estado => {
+    // Agrupar en orden de flujo
+    ['pendiente', 'pendiente_programacion', 'esperando_pago', 'esperando_dia_entrega', 'pagado'].forEach(estado => {
       const grupo = pedidos.filter(p => p.estado === estado);
       if (grupo.length === 0) return;
 
@@ -406,13 +410,15 @@ function buildFila(p) {
 
 
 // Transiciones válidas por estado actual — espejo del middleware del backend.
-// Si necesitas habilitar una transición adicional, agrégala aquí y en el middleware.
+// Nota: pendiente_programacion → esperando_dia_entrega va por el endpoint programar-entrega.
 const TRANSICIONES_VALIDAS = {
-  pendiente:      ['esperando_pago', 'cancelado'],
-  esperando_pago: ['pagado', 'cancelado'],
-  pagado:         ['entregado', 'cancelado'],
-  entregado:      [],
-  cancelado:      []
+  pendiente:              ['esperando_pago', 'cancelado'],
+  pendiente_programacion: ['cancelado'],
+  esperando_pago:         ['pagado', 'cancelado'],
+  esperando_dia_entrega:  ['entregado', 'cancelado'],
+  pagado:                 ['entregado', 'cancelado'],
+  entregado:              [],
+  cancelado:              []
 };
 
 
@@ -691,6 +697,29 @@ function abrirDetallePedidoVendedor(pedido) {
       </div>`;
   };
 
+  // ── Contacto del cliente ─────────────────────────────────────
+  const buildContactoHtml = (telefono, email) => {
+    if (!telefono && !email) return '';
+    return `
+      <div style="margin-top:12px;background:rgba(42,42,42,.4);border-radius:8px;padding:14px;">
+        <p style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted-fg);margin-bottom:10px;text-transform:uppercase;">Contacto del cliente</p>
+        ${telefono ? `<p style="font-size:13px;margin-bottom:4px;">Tel: ${telefono}</p>` : ''}
+        ${email    ? `<p style="font-size:13px;">${email}</p>` : ''}
+      </div>`;
+  };
+
+  // ── Punto de entrega ─────────────────────────────────────────
+  const buildPuntoEntregaHtml = (puntoEntrega, telefono, email) => {
+    const infoHtml = puntoEntrega
+      ? `<div style="background:rgba(42,42,42,.4);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;">
+           <p style="font-weight:500;">${puntoEntrega.nombre}</p>
+           ${puntoEntrega.descripcion ? `<p style="color:var(--muted-fg);margin-top:2px;">${puntoEntrega.descripcion}</p>` : ''}
+         </div>`
+      : `<p style="color:var(--muted-fg);font-size:13px;">Sin información del punto de entrega</p>`;
+
+    return infoHtml + buildContactoHtml(telefono, email);
+  };
+
   // ── Productos ────────────────────────────────────────────────
   const buildItemsHtml = items => {
     if (!items || items.length === 0) {
@@ -723,9 +752,10 @@ function abrirDetallePedidoVendedor(pedido) {
     }).join('');
   };
 
-  const itemsIniciales  = pedido.items || pedido.detalles || [];
-  const esEstadoFinal   = pedido.estado === 'entregado' || pedido.estado === 'cancelado';
-  const puedeConfirmarPago = pedido.estado === 'esperando_pago';
+  const itemsIniciales         = pedido.items || pedido.detalles || [];
+  const esEstadoFinal          = pedido.estado === 'entregado' || pedido.estado === 'cancelado';
+  const puedeConfirmarPago     = pedido.estado === 'esperando_pago';
+  const puedeProgamarEntrega   = pedido.estado === 'pendiente_programacion';
 
   // ── Modal ────────────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -747,7 +777,7 @@ function abrirDetallePedidoVendedor(pedido) {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:20px;
                     padding-bottom:20px;margin-bottom:24px;border-bottom:1px solid var(--border);">
           <div>
-            <p class="form-label" style="margin-bottom:4px;">Fecha</p>
+            <p class="form-label" style="margin-bottom:4px;">Fecha del pedido</p>
             <p style="font-size:14px;">${formatDate(fechaMostrar)}</p>
           </div>
           <div>
@@ -761,6 +791,10 @@ function abrirDetallePedidoVendedor(pedido) {
               ? `<p style="font-size:12px;color:var(--muted-fg);">${pedido.email_cliente}</p>`
               : ''}
           </div>
+          <div id="detalle-vend-fecha-entrega-wrap" style="display:none;">
+            <p class="form-label" style="margin-bottom:4px;">Fecha de entrega</p>
+            <p id="detalle-vend-fecha-entrega" style="font-size:14px;color:var(--primary);font-weight:500;"></p>
+          </div>
         </div>
 
         <!-- Productos -->
@@ -769,10 +803,10 @@ function abrirDetallePedidoVendedor(pedido) {
           <div id="detalle-vend-items">${buildItemsHtml(itemsIniciales)}</div>
         </div>
 
-        <!-- Dirección -->
+        <!-- Entrega -->
         <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-          <p class="order-section-title">${Icons.MapPin(16)} Dirección de entrega</p>
-          <div id="detalle-vend-dir">${buildDireccionHtml(pedido.direccion)}</div>
+          <p class="order-section-title" id="detalle-vend-entrega-title">${Icons.MapPin(16)} Dirección de entrega</p>
+          <div id="detalle-vend-dir"><p style="font-size:13px;color:var(--muted-fg);">Cargando...</p></div>
         </div>
 
         <!-- Información de pago -->
@@ -807,6 +841,11 @@ function abrirDetallePedidoVendedor(pedido) {
           <button class="btn btn-outline" id="btn-detalle-vend-pago"
                   style="border-color:var(--green);color:var(--green);">
             ${Icons.FileCheck(14)} Confirmar pago
+          </button>` : ''}
+        ${puedeProgamarEntrega ? `
+          <button class="btn btn-outline" id="btn-detalle-vend-programar"
+                  style="border-color:var(--primary);color:var(--primary);">
+            ${Icons.Clock(14)} Programar entrega
           </button>` : ''}
         <button class="btn btn-outline" id="btn-detalle-vend-nota">
           ${Icons.Pencil(14)} ${pedido.comentarios_vendedor ? 'Editar nota' : 'Agregar nota'}
@@ -863,6 +902,12 @@ function abrirDetallePedidoVendedor(pedido) {
     abrirModalComentario(idMostrar, pedido.comentarios_vendedor || '');
   });
 
+  // Programar entrega → abre modal para ingresar fecha y hora
+  document.getElementById('btn-detalle-vend-programar')?.addEventListener('click', () => {
+    cerrar();
+    abrirModalProgramarEntrega(idMostrar);
+  });
+
   // Cargar el detalle completo: productos, dirección e información de pago
   if (!isNaN(Number(idMostrar))) {
     Api.getPedidoById(Number(idMostrar))
@@ -872,9 +917,32 @@ function abrirDetallePedidoVendedor(pedido) {
           const container = document.getElementById('detalle-vend-items');
           if (container) container.innerHTML = buildItemsHtml(items);
         }
-        if (data.direccion) {
-          const dirContainer = document.getElementById('detalle-vend-dir');
-          if (dirContainer) dirContainer.innerHTML = buildDireccionHtml(data.direccion);
+        const dirContainer = document.getElementById('detalle-vend-dir');
+        const titleEl = document.getElementById('detalle-vend-entrega-title');
+        if (data.tipo_entrega === 'punto_entrega') {
+          if (titleEl) titleEl.innerHTML = `${Icons.MapPin(16)} Punto de entrega`;
+          if (dirContainer) dirContainer.innerHTML = buildPuntoEntregaHtml(
+            data.punto_entrega,
+            data.telefono_cliente,
+            data.email_cliente
+          );
+        } else if (data.direccion) {
+          if (dirContainer) dirContainer.innerHTML =
+            buildDireccionHtml(data.direccion) +
+            buildContactoHtml(data.telefono_cliente, data.email_cliente);
+        }
+
+        if (data.fecha_hora_entrega) {
+          const wrap = document.getElementById('detalle-vend-fecha-entrega-wrap');
+          const fechaEl = document.getElementById('detalle-vend-fecha-entrega');
+          if (wrap) wrap.style.display = '';
+          if (fechaEl) {
+            const d = new Date(data.fecha_hora_entrega);
+            fechaEl.textContent = d.toLocaleString('es-MX', {
+              day: 'numeric', month: 'long', year: 'numeric',
+              hour: '2-digit', minute: '2-digit'
+            });
+          }
         }
       })
       .catch(() => {});
@@ -891,6 +959,77 @@ function abrirDetallePedidoVendedor(pedido) {
           '<p style="font-size:13px;color:var(--muted-fg);">Sin registro de pago.</p>';
       });
   }
+}
+
+
+/**
+ * Abre un modal para que el vendedor/admin asigne fecha y hora de entrega
+ * a un pedido en estado 'pendiente_programacion'.
+ * Al confirmar llama a la API y avanza el estado a 'esperando_dia_entrega'.
+ *
+ * @param {number} idPedido - ID del pedido a programar
+ */
+function abrirModalProgramarEntrega(idPedido) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  // Mínimo: ahora mismo (para no permitir fechas pasadas)
+  const ahora = new Date();
+  const minLocal = new Date(ahora - ahora.getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 16);
+
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h3>Programar entrega</h3>
+      </div>
+      <div class="modal-body">
+        <p class="form-hint" style="margin-bottom:20px;">
+          Pedido #${idPedido} · Al confirmar, el pedido cambiará a "Esperando día de entrega"
+        </p>
+        <label class="form-label">Fecha y hora de entrega</label>
+        <input type="datetime-local" id="input-fecha-entrega"
+               min="${minLocal}"
+               style="margin-top:6px;width:100%;" />
+      </div>
+      <div class="modal-footer" style="padding:0 24px 24px;">
+        <button class="btn btn-outline" id="btn-cancelar-programar" style="flex:1;">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirmar-programar" style="flex:1;">Confirmar</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('btn-cancelar-programar').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('btn-confirmar-programar').addEventListener('click', () => {
+    const valor = document.getElementById('input-fecha-entrega').value;
+    if (!valor) {
+      showToast('Selecciona una fecha y hora de entrega.', 'error');
+      return;
+    }
+
+    const btnConfirmar = document.getElementById('btn-confirmar-programar');
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = 'Guardando...';
+
+    Api.programarEntrega(idPedido, new Date(valor).toISOString())
+      .then(() => {
+        overlay.remove();
+        showToast('Entrega programada correctamente.', 'success');
+        return Api.getPedidos();
+      })
+      .then(data => {
+        AppState.setPedidos(data);
+        renderDashboardContent();
+      })
+      .catch(err => {
+        showToast(err.message || 'Error al programar la entrega.', 'error');
+        btnConfirmar.disabled = false;
+        btnConfirmar.textContent = 'Confirmar';
+      });
+  });
 }
 
 

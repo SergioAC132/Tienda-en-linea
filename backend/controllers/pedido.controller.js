@@ -1,4 +1,4 @@
-const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, findTopProductos } = require('../models/pedido.model');
+const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, findTopProductos, programarEntrega } = require('../models/pedido.model');
 
 // ─────────────────────────────────────────────────────────────
 //  CONTROLLER DE PEDIDOS
@@ -211,6 +211,45 @@ const getTopProductos = async (req, res) => {
 };
 
 
+/**
+ * PATCH /api/pedidos/:id/programar-entrega
+ * Asigna fecha y hora de entrega a un pedido en 'pendiente_programacion'
+ * y lo avanza automáticamente a 'esperando_dia_entrega'.
+ * Solo Vendedor y Admin pueden usarlo.
+ *
+ * Body esperado:
+ *   - fecha_hora_entrega {string} Fecha y hora ISO 8601 (requerido)
+ *
+ * Responde con 200 y el pedido actualizado, 400 si falta la fecha,
+ * 404 si no existe o no aplica, o 500 si hay error.
+ */
+const programarEntregaHandler = async (req, res) => {
+    const { id } = req.params;
+    const { fecha_hora_entrega } = req.body;
+
+    if (!fecha_hora_entrega) {
+        return res.status(400).json({ message: 'El campo fecha_hora_entrega es requerido.' });
+    }
+
+    const fecha = new Date(fecha_hora_entrega);
+    if (isNaN(fecha.getTime())) {
+        return res.status(400).json({ message: 'El formato de fecha_hora_entrega no es válido.' });
+    }
+
+    try {
+        const pedidoActualizado = await programarEntrega(id, fecha.toISOString());
+        if (!pedidoActualizado) {
+            return res.status(404).json({
+                message: 'Pedido no encontrado o no está en estado pendiente de programación.'
+            });
+        }
+        res.json(pedidoActualizado);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al programar la entrega.', error: error.message });
+    }
+};
+
+
 module.exports = {
     crearPedido,
     getPedidos,
@@ -219,4 +258,5 @@ module.exports = {
     cancelarPedidoPropio,
     agregarComentario,
     getTopProductos,
+    programarEntregaHandler,
 };

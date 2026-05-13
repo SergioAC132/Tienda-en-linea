@@ -42,7 +42,8 @@ const frontendPath = path.join(__dirname, '..', 'frontend');
 app.use(express.static(frontendPath));
 
 // Rutas del frontend
-app.get('/',          (_req, res) => res.redirect('/login'));
+app.get('/',          (_req, res) => res.redirect('/catalogo'));
+app.get('/catalogo',          (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'catalogo.html')));
 app.get('/login',             (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'login.html')));
 app.get('/registro',         (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'registro.html')));
 app.get('/olvidar-password', (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'olvidar-password.html')));
