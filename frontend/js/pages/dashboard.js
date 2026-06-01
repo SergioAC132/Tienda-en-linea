@@ -191,7 +191,7 @@ function renderDashboardContent() {
 
       <div class="full-card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-          <h3 style="font-family:var(--font-serif);font-size:20px;margin:0;">Pedidos Activos</h3>
+          <h3 style="font-family:var(--font-serif);font-size:20px;margin:0;">Pedidos</h3>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <select id="filtro-estado" style="width:auto;min-width:190px;">
               <option value="">Todos los estados</option>
@@ -200,6 +200,8 @@ function renderDashboardContent() {
               <option value="esperando_pago">Esperando pago</option>
               <option value="esperando_dia_entrega">Esperando día de entrega</option>
               <option value="pagado">Pagado</option>
+              <option value="entregado">Entregado</option>
+              <option value="cancelado">Cancelado</option>
             </select>
             <div style="display:flex;align-items:center;gap:6px;">
               <input type="date" id="filtro-fecha-desde" style="width:auto;min-width:140px;" title="Desde" />
@@ -225,7 +227,7 @@ function renderDashboardContent() {
     </div>`;
 
   // Renderizar la tabla con los filtros actuales (se conservan entre re-renders)
-  renderFilasPedidos(pedidosActivos);
+  renderFilasPedidos(pedidos);
 
   // Restaurar los valores de los filtros si ya había una selección previa
   const selEstado    = document.getElementById('filtro-estado');
@@ -243,7 +245,7 @@ function renderDashboardContent() {
     _filtroFechaDesde = selDesde?.value  || '';
     _filtroFechaHasta = selHasta?.value  || '';
 
-    let filtrados = pedidosActivos;
+    let filtrados = pedidos;
 
     if (_filtroEstado) {
       filtrados = filtrados.filter(p => p.estado === _filtroEstado);
@@ -298,7 +300,9 @@ function renderFilasPedidos(pedidos) {
     pendiente_programacion: 'Pendiente de programación',
     esperando_pago:         'Esperando pago',
     esperando_dia_entrega:  'Esperando día de entrega',
-    pagado:                 'Pagado'
+    pagado:                 'Pagado',
+    entregado:              'Entregado',
+    cancelado:              'Cancelado'
   };
 
   // Si hay filtro de estado activo, mostrar lista plana sin encabezados de grupo
@@ -308,7 +312,7 @@ function renderFilasPedidos(pedidos) {
 
   if (conAgrupacion) {
     // Agrupar en orden de flujo
-    ['pendiente', 'pendiente_programacion', 'esperando_pago', 'esperando_dia_entrega', 'pagado'].forEach(estado => {
+    ['pendiente', 'pendiente_programacion', 'esperando_pago', 'esperando_dia_entrega', 'pagado', 'entregado', 'cancelado'].forEach(estado => {
       const grupo = pedidos.filter(p => p.estado === estado);
       if (grupo.length === 0) return;
 
