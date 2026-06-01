@@ -3,12 +3,14 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const path = require('path');
-const authRoutes = require('./routes/auth.routes');
+const authRoutes    = require('./routes/auth.routes');
 const direccionRoutes = require('./routes/direccion.routes');
-const pedidoRoutes = require('./routes/pedido.routes');
+const pedidoRoutes  = require('./routes/pedido.routes');
 const carritoRoutes = require('./routes/carrito.routes');
 const productoRoutes = require('./routes/productoRoutes');
-const adminRoutes = require('./routes/admin.routes');
+const adminRoutes   = require('./routes/admin.routes');
+const pagoRoutes    = require('./routes/pago.routes');
+const webhookRoutes = require('./routes/webhook.routes');
 
 dotenv.config();
 
@@ -25,7 +27,9 @@ app.use('/api/direcciones', direccionRoutes);
 app.use('/api/pedidos', pedidoRoutes);
 app.use('/api/carrito', carritoRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/pagos', pagoRoutes);
 app.use('/api', productoRoutes);
+app.use('/webhooks', webhookRoutes);
 
 // ------ Archivos subidos (imágenes) ------
 // Ruta actual: database/uploads/
@@ -38,7 +42,8 @@ const frontendPath = path.join(__dirname, '..', 'frontend');
 app.use(express.static(frontendPath));
 
 // Rutas del frontend
-app.get('/',          (_req, res) => res.redirect('/login'));
+app.get('/',          (_req, res) => res.redirect('/catalogo'));
+app.get('/catalogo',          (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'catalogo.html')));
 app.get('/login',             (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'login.html')));
 app.get('/registro',         (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'registro.html')));
 app.get('/olvidar-password', (_req, res) => res.sendFile(path.join(frontendPath, 'views', 'olvidar-password.html')));

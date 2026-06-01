@@ -4,7 +4,6 @@ let _cantidad = 1;
 let _producto = null; // cache del producto actual
 
 async function renderDetalle() {
-  if (!requireAuth(['CLIENTE'])) return;
   renderHeader();
 
   const root = document.getElementById('app-root');
@@ -41,7 +40,9 @@ async function renderDetalle() {
   const tallasDisponibles = producto.tallas.filter(t => t.disponible);
   const tallaActual       = producto.tallas.find(t => t.talla === _talla);
   const stockActual       = tallaActual ? tallaActual.stock : 0;
-  const puedeAgregar      = producto.disponible && tallasDisponibles.length > 0 && _talla && stockActual > 0;
+  const usuario           = AppState.currentUser;
+  const puedeAgregar      = !!usuario && producto.disponible && tallasDisponibles.length > 0 && _talla && stockActual > 0;
+  const sinSesionConTalla = !usuario && _talla;
 
   const galleryHtml = imagenes.map((img, i) => `
     <div class="detail-gallery-img">
@@ -76,9 +77,9 @@ async function renderDetalle() {
         ${_talla ? `<p class="stock-info" style="margin:8px 0 0;font-size:13px;color:${stockActual <= 3 ? 'var(--danger, #e53e3e)' : 'var(--muted-fg)'};">${stockActual} pieza${stockActual !== 1 ? 's' : ''} disponible${stockActual !== 1 ? 's' : ''}</p>` : ''}
       </div>
       <button id="add-cart"
-        class="btn btn-full btn-lg ${puedeAgregar?'btn-primary':''}"
-        ${!puedeAgregar?'disabled style="background:var(--secondary);color:var(--muted-fg);cursor:not-allowed;"':''}>
-        ${Icons.ShoppingBag(20)} Agregar al carrito
+        class="btn btn-full btn-lg ${puedeAgregar ? 'btn-primary' : sinSesionConTalla ? 'btn-primary' : ''}"
+        ${!puedeAgregar && !sinSesionConTalla ? 'disabled style="background:var(--secondary);color:var(--muted-fg);cursor:not-allowed;"' : ''}>
+        ${Icons.ShoppingBag(20)} ${sinSesionConTalla ? 'Inicia sesión para agregar al carrito' : 'Agregar al carrito'}
       </button>
     `;
 
@@ -117,6 +118,7 @@ async function renderDetalle() {
   });
 
   document.getElementById('add-cart')?.addEventListener('click', () => {
+    if (sinSesionConTalla) { Nav.go(Nav.login); return; }
     if (!puedeAgregar) { showToast('Selecciona una talla disponible', 'error'); return; }
 
     const tallaInfo     = producto.tallas.find(t => t.talla === _talla);

@@ -1,4 +1,4 @@
-const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, iniciarPagoPedido, findTopProductos } = require('../models/pedido.model');
+const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedidoById, findAllPedidos, updateEstadoPedido, updateComentarioVendedor, cancelarPedido, findTopProductos, programarEntrega } = require('../models/pedido.model');
 
 // ─────────────────────────────────────────────────────────────
 //  CONTROLLER DE PEDIDOS
@@ -20,10 +20,10 @@ const { createPedido, findPedidosByUsuario, findPedidoByIdAndUsuario, findPedido
  * Responde con 201 y el pedido creado, o 500 si ocurre un error inesperado.
  */
 const crearPedido = async (req, res) => {
-    const { total, id_direccion, comentarios } = req.body;
+    const { total, id_direccion, comentarios, tipo_entrega, id_punto_entrega } = req.body;
     try {
         const idUsuario = req.usuario.id_usuario;
-        const nuevoPedido = await createPedido(idUsuario, total, id_direccion, comentarios);
+        const nuevoPedido = await createPedido(idUsuario, total, id_direccion, comentarios, tipo_entrega, id_punto_entrega);
         res.status(201).json(nuevoPedido);
     } catch (error) {
         if (error.message && error.message.startsWith('Stock insuficiente')) {
@@ -164,38 +164,6 @@ const cancelarPedidoPropio = async (req, res) => {
 
 
 /**
- * PATCH /api/pedidos/:id/pagar
- * Avanza el estado del pedido de 'pendiente' a 'esperando_pago'.
- * Se llama desde pago.js cuando el cliente registra su intención de pago.
- * Solo el cliente dueño del pedido puede usarlo, y únicamente si el pedido
- * sigue en estado 'pendiente' — el modelo rechaza cualquier otro caso.
- *
- * Params:
- *   - id  {number}  ID del pedido a actualizar
- *
- * No requiere body. El id_usuario se obtiene del token JWT.
- * Responde con 200 y el pedido actualizado, 404 si no aplica, o 500 si hay error.
- */
-const iniciarPago = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const idUsuario = req.usuario.id_usuario;
-        const pedidoActualizado = await iniciarPagoPedido(id, idUsuario);
-
-        if (!pedidoActualizado) {
-            return res.status(404).json({
-                message: 'Pedido no encontrado, no te pertenece, o ya no está en estado pendiente.'
-            });
-        }
-
-        res.json(pedidoActualizado);
-    } catch (error) {
-        res.status(500).json({ message: 'Error al iniciar el pago del pedido.', error: error.message });
-    }
-};
-
-
-/**
  * PATCH /api/pedidos/:id/comentario
  * Agrega o edita el comentario interno del vendedor en un pedido.
  * No modifica el estado ni ningún otro campo — solo comentarios_vendedor.
@@ -243,13 +211,52 @@ const getTopProductos = async (req, res) => {
 };
 
 
+/**
+ * PATCH /api/pedidos/:id/programar-entrega
+ * Asigna fecha y hora de entrega a un pedido en 'pendiente_programacion'
+ * y lo avanza automáticamente a 'esperando_dia_entrega'.
+ * Solo Vendedor y Admin pueden usarlo.
+ *
+ * Body esperado:
+ *   - fecha_hora_entrega {string} Fecha y hora ISO 8601 (requerido)
+ *
+ * Responde con 200 y el pedido actualizado, 400 si falta la fecha,
+ * 404 si no existe o no aplica, o 500 si hay error.
+ */
+const programarEntregaHandler = async (req, res) => {
+    const { id } = req.params;
+    const { fecha_hora_entrega } = req.body;
+
+    if (!fecha_hora_entrega) {
+        return res.status(400).json({ message: 'El campo fecha_hora_entrega es requerido.' });
+    }
+
+    const fecha = new Date(fecha_hora_entrega);
+    if (isNaN(fecha.getTime())) {
+        return res.status(400).json({ message: 'El formato de fecha_hora_entrega no es válido.' });
+    }
+
+    try {
+        const pedidoActualizado = await programarEntrega(id, fecha.toISOString());
+        if (!pedidoActualizado) {
+            return res.status(404).json({
+                message: 'Pedido no encontrado o no está en estado pendiente de programación.'
+            });
+        }
+        res.json(pedidoActualizado);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al programar la entrega.', error: error.message });
+    }
+};
+
+
 module.exports = {
     crearPedido,
     getPedidos,
     getPedidoById,
     actualizarEstado,
     cancelarPedidoPropio,
-    iniciarPago,
     agregarComentario,
     getTopProductos,
+    programarEntregaHandler,
 };

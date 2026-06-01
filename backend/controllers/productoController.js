@@ -46,7 +46,7 @@ const getAllProductos = async (req, res) => {
 // POST /api/admin/productos  — UC-05 crear
 const createProducto = async (req, res) => {
   try {
-    const { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas } = req.body;
+    const { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas, tallas_stock } = req.body;
 
     // Campos requeridos
     if (!nombre || !precio_base) {
@@ -58,9 +58,10 @@ const createProducto = async (req, res) => {
 
     const producto = result.producto;
 
-    // Asignar tallas si vienen en el body
-    if (ids_tallas && ids_tallas.length > 0) {
-      await productoModel.setTallasProducto(producto.id_producto, ids_tallas);
+    // tallas_stock ([{ id_talla, stock }]) tiene precedencia sobre ids_tallas ([id_talla, ...])
+    const tallasData = tallas_stock || ids_tallas;
+    if (tallasData && tallasData.length > 0) {
+      await productoModel.setTallasProducto(producto.id_producto, tallasData);
     }
 
     res.status(201).json({ mensaje: 'Producto guardado exitosamente.', producto });
@@ -73,21 +74,38 @@ const createProducto = async (req, res) => {
 // PUT /api/admin/productos/:id  — UC-05 editar
 const updateProducto = async (req, res) => {
   try {
-    const { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas } = req.body;
+    const { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion, ids_tallas, tallas_stock } = req.body;
 
     const result = await productoModel.updateProducto(req.params.id, { nombre, descripcion, precio_base, disponible, activo, fecha_publicacion });
     if (!result.producto) return res.status(404).json({ error: 'Producto no encontrado.' });
     if (result.error)    return res.status(409).json({ error: result.error });
 
-    // Actualizar tallas si vienen
-    if (ids_tallas !== undefined) {
-      await productoModel.setTallasProducto(req.params.id, ids_tallas);
+    // tallas_stock tiene precedencia sobre ids_tallas
+    const tallasData = tallas_stock !== undefined ? tallas_stock : ids_tallas;
+    if (tallasData !== undefined) {
+      await productoModel.setTallasProducto(req.params.id, tallasData);
     }
 
     res.json({ mensaje: 'Producto actualizado correctamente.', producto: result.producto });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al actualizar el producto.' });
+  }
+};
+
+// PATCH /api/admin/productos/:id/tallas/:idTalla/stock
+const updateStockTalla = async (req, res) => {
+  try {
+    const { stock } = req.body;
+    if (stock === undefined || stock === null || isNaN(+stock) || +stock < 0) {
+      return res.status(400).json({ error: 'El stock debe ser un número mayor o igual a 0.' });
+    }
+    const row = await productoModel.updateStockTalla(req.params.id, req.params.idTalla, +stock);
+    if (!row) return res.status(404).json({ error: 'Relación producto-talla no encontrada.' });
+    res.json({ mensaje: 'Stock actualizado.', ...row });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar el stock.' });
   }
 };
 
@@ -193,6 +211,19 @@ const deleteTalla = async (req, res) => {
   }
 };
 
+// PATCH /api/tallas/:id/orden  — intercambia orden con otra talla
+const swapOrdenTallas = async (req, res) => {
+  try {
+    const { swap_with } = req.body;
+    if (!swap_with) return res.status(400).json({ error: 'Se requiere swap_with.' });
+    const ok = await tallaModel.swapOrdenTallas(req.params.id, swap_with);
+    if (!ok) return res.status(404).json({ error: 'Talla(s) no encontrada(s).' });
+    res.json({ mensaje: 'Orden actualizado.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al reordenar tallas.' });
+  }
+};
+
 module.exports = {
   getCatalogo,
   getProductoDetalle,
@@ -200,6 +231,7 @@ module.exports = {
   getProductoAdminById,
   createProducto,
   updateProducto,
+  updateStockTalla,
   desactivarProducto,
   addImagen,
   deleteImagen,
@@ -207,4 +239,5 @@ module.exports = {
   createTalla,
   updateTalla,
   deleteTalla,
+  swapOrdenTallas,
 };
