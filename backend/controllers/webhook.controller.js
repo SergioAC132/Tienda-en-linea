@@ -22,7 +22,7 @@ const clipWebhook = async (req, res) => {
     try {
         console.log('WEBHOOK BODY:', JSON.stringify(req.body, null, 2));
 
-        const status = req.body.status;
+        const status = req.body.status || req.body.data?.status;
         const payment_request_id =
             req.body.payment_request_id ||
             req.body.data?.payment_request_id;
@@ -30,7 +30,6 @@ const clipWebhook = async (req, res) => {
         console.log('status:', status);
         console.log('payment_request_id:', payment_request_id);
 
-        // ✔️ ESTE ES EL FILTRO CORRECTO
         if (status !== 'CHECKOUT_COMPLETED') {
             console.log('Evento ignorado');
             return;

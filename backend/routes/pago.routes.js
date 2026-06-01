@@ -12,6 +12,7 @@ const {
     subirComprobante,
     confirmarPagoHandler,
     rechazarPagoHandler,
+    verificarPagoClipHandler,
 } = require('../controllers/pago.controller');
 
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
@@ -104,6 +105,18 @@ router.post('/',
     verificarRol('CLIENTE'),
     validarRegistrarPago,
     registrarPago
+);
+
+
+// GET /api/pagos/pedido/:id_pedido/verificar-clip
+// Verifica con la API de Clip si el pago fue completado y confirma automáticamente.
+// Solo el Cliente dueño del pedido puede usar este endpoint.
+// Declarada ANTES de /pedido/:id_pedido para evitar que Express interprete
+// 'verificar-clip' como un segmento adicional de la ruta más corta.
+router.get('/pedido/:id_pedido/verificar-clip',
+    verificarToken,
+    verificarRol('CLIENTE'),
+    verificarPagoClipHandler
 );
 
 

@@ -23,7 +23,7 @@ const generarLinkPago = async (idPedido, monto) => {
             currency:             'MXN',
             purchase_description: `Pedido #${idPedido}`,
             redirection_url: {
-                success: `${appUrl}/views/pedidos.html?pago=completado`,
+                success: `${appUrl}/views/pedidos.html?pago=completado&pedidoId=${idPedido}`,
                 error:   `${appUrl}/views/pago.html?pedidoId=${idPedido}`,
                 default: `${appUrl}/views/pedidos.html`,
             },
@@ -52,4 +52,23 @@ const generarLinkPago = async (idPedido, monto) => {
     };
 };
 
-module.exports = { generarLinkPago };
+/**
+ * Consulta el estado actual de un pago en Clip.
+ *
+ * @param {string} paymentRequestId - payment_request_id almacenado en pagos.referencia
+ * @returns {Object} Respuesta de Clip con campo `status`
+ */
+const verificarPago = async (paymentRequestId) => {
+    const { data } = await axios.get(
+        `https://api.payclip.com/v2/checkout/${paymentRequestId}`,
+        {
+            headers: {
+                'Authorization': `Basic ${process.env.CLIP_API_KEY}`,
+                'Content-Type':  'application/json',
+            },
+        }
+    );
+    return data;
+};
+
+module.exports = { generarLinkPago, verificarPago };

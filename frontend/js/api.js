@@ -288,6 +288,10 @@ const Api = {
     return await this._req(`/pagos/${idPago}/rechazar`, { method: 'PATCH' });
   },
 
+  async verificarPagoClip(idPedido) {
+    return await this._req(`/pagos/pedido/${idPedido}/verificar-clip`);
+  },
+
   async subirComprobante(idPago, file) {
     const token = AppState.getToken();
     const formData = new FormData();

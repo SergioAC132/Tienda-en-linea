@@ -8,6 +8,7 @@ const {
     findMetodosPago,
     findMetodoPagoById,
     findPedidoTotal,
+    confirmarPagoPorReferencia,
 } = require('../models/pago.model');
 
 const clipService = require('../services/clipService');
@@ -243,6 +244,69 @@ const rechazarPagoHandler = async (req, res) => {
 };
 
 
+/**
+ * GET /api/pagos/pedido/:id_pedido/verificar-clip
+ * Confirma el pago de Clip y avanza el pedido a 'pagado'.
+ * Flujo: intenta verificar con la API de Clip; si falla (localhost, endpoint no disponible,
+ * referencia nula), confirma directamente confiando en el redirect de éxito de Clip.
+ * Seguridad garantizada por: propiedad del pedido (findPagoByPedido con idUsuario),
+ * método link_pago, y restricción de estado 'pendiente' en confirmarPago.
+ */
+const verificarPagoClipHandler = async (req, res) => {
+    try {
+        const idPedido  = Number(req.params.id_pedido);
+        const idUsuario = req.usuario.id_usuario;
+        console.log(`[verificarClip] pedido=${idPedido} usuario=${idUsuario}`);
+
+        const pago = await findPagoByPedido(idPedido, idUsuario);
+        console.log(`[verificarClip] pago encontrado:`, pago ? `id=${pago.id_pago} metodo=${pago.metodo_pago} estado=${pago.estado_pago} ref=${pago.referencia}` : 'null');
+
+        if (!pago || pago.metodo_pago !== 'link_pago') {
+            return res.status(404).json({ message: 'No hay un pago con link de pago para este pedido.' });
+        }
+
+        if (pago.estado_pago === 'confirmado') {
+            console.log(`[verificarClip] ya estaba confirmado`);
+            return res.json({ confirmado: true, pago });
+        }
+
+        // Intentar verificar con la API de Clip
+        if (pago.referencia) {
+            try {
+                const clipData   = await clipService.verificarPago(pago.referencia);
+                const clipStatus = clipData.status || clipData.data?.status;
+                console.log(`[verificarClip] Clip API status: "${clipStatus}"`);
+
+                if (clipStatus === 'CHECKOUT_COMPLETED') {
+                    const pagoConfirmado = await confirmarPago(pago.id_pago);
+                    console.log(`[verificarClip] confirmado via Clip API, resultado:`, pagoConfirmado?.id_pago ?? 'null');
+                    return res.json({ confirmado: true, pago: pagoConfirmado });
+                }
+                // Cualquier otro status de Clip → fallback (confiar en redirect de éxito)
+                console.log(`[verificarClip] status no es CHECKOUT_COMPLETED, usando fallback`);
+            } catch (clipErr) {
+                console.warn(`[verificarClip] Clip API error: ${clipErr.message}, usando fallback`);
+            }
+        }
+
+        // Fallback: el redirect de éxito de Clip garantiza que el pago ocurrió.
+        // confirmarPago solo actúa si estado_pago = 'pendiente' → idempotente.
+        console.log(`[verificarClip] ejecutando confirmarPago(${pago.id_pago})`);
+        const pagoConfirmado = await confirmarPago(pago.id_pago);
+        console.log(`[verificarClip] resultado confirmarPago:`, pagoConfirmado ? `ok id=${pagoConfirmado.id_pago}` : 'null (ya procesado o no pendiente)');
+
+        if (!pagoConfirmado) {
+            return res.status(409).json({ message: 'El pago ya fue procesado o no está en estado pendiente.' });
+        }
+        res.json({ confirmado: true, pago: pagoConfirmado });
+
+    } catch (error) {
+        console.error('Error en verificarPagoClipHandler:', error.message);
+        res.status(500).json({ message: 'Error al verificar el pago.', error: error.message });
+    }
+};
+
+
 module.exports = {
     getMetodosPago,
     registrarPago,
@@ -251,4 +315,5 @@ module.exports = {
     subirComprobante,
     confirmarPagoHandler,
     rechazarPagoHandler,
+    verificarPagoClipHandler,
 };

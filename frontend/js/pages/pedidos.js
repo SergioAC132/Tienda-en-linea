@@ -11,8 +11,8 @@ function renderPedidos() {
 
   const root = document.getElementById('app-root');
   const pagoCompletado = getParam('pago') === 'completado';
+  const pedidoIdParam  = getParam('pedidoId');
 
-  // Limpiar el parámetro de la URL para que un refresh no reactive el polling
   if (pagoCompletado) {
     history.replaceState(null, '', window.location.pathname);
   }
@@ -30,7 +30,20 @@ function renderPedidos() {
       renderPedidosList();
       if (pagoCompletado) {
         showToast('¡Pago procesado! Actualizando estado del pedido...');
-        esperarConfirmacion(data);
+        if (pedidoIdParam) {
+          verificarYActualizarPago(Number(pedidoIdParam), data);
+        } else {
+          // Link generado antes del cambio — sin pedidoId en URL.
+          // Buscar el pedido en esperando_pago más reciente del usuario y verificar.
+          const candidato = data
+            .filter(p => p.estado === 'esperando_pago')
+            .sort((a, b) => new Date(b.fecha_pedido) - new Date(a.fecha_pedido))[0];
+          if (candidato) {
+            verificarYActualizarPago(Number(candidato.id_pedido), data);
+          } else {
+            esperarConfirmacion(data);
+          }
+        }
       }
     })
     .catch(() => {
@@ -460,6 +473,30 @@ function abrirDetallePedidoCliente(pedido) {
         }
       });
   }
+}
+
+
+/**
+ * Consulta activamente la API de Clip para verificar si el pago fue completado.
+ * Si el backend confirma el pago, refresca la lista y muestra notificación.
+ * Si falla o el pago aún no está listo, cae al polling como fallback.
+ *
+ * @param {number} idPedido         - ID del pedido recién pagado
+ * @param {Array}  pedidosAnteriores - Snapshot de pedidos al llegar a la página
+ */
+function verificarYActualizarPago(idPedido, pedidosAnteriores) {
+  Api.verificarPagoClip(idPedido)
+    .then(result => {
+      if (result.confirmado) {
+        return Api.getPedidos().then(data => {
+          AppState.setPedidos(data);
+          renderPedidosList();
+          showToast('¡Pago confirmado! Tu pedido ha sido actualizado.', 'success');
+        });
+      }
+      esperarConfirmacion(pedidosAnteriores);
+    })
+    .catch(() => esperarConfirmacion(pedidosAnteriores));
 }
 
 
