@@ -4,7 +4,7 @@ let _form          = { nombre:'', descripcion:'', precio_base:'', disponible:tru
 let _imgs          = [];     // [{ id_imagen?, url, orden, file? }]
 let _tallasSelected = [];    // [id_talla, ...]
 let _tallasStockMap = {};    // { [id_talla]: stock }
-let _confirmDelete = null;
+
 let _originalImgIds = [];    // id_imagen values presentes al abrir edit
 let _stockModal    = null;   // null | productoId (modal rápido de stock desde tarjeta)
 let _stockModalData = [];    // [{ id_talla, nombre, stock }]
@@ -73,7 +73,6 @@ function renderCatalogoVendedor() {
       ${grid}
     </div>
     ${_modal ? productModal() : ''}
-    ${_confirmDelete ? deleteModal() : ''}
     ${_tallasModal ? tallasManagerModal() : ''}
     ${_stockModal ? stockManagerModal() : ''}
   `;
@@ -89,7 +88,6 @@ function renderCatalogoVendedor() {
     const { action, pid } = el.dataset;
     if (action === 'edit')   el.addEventListener('click', () => openEdit(pid));
     if (action === 'stock')  el.addEventListener('click', () => openStockModal(pid));
-    if (action === 'delete') el.addEventListener('click', () => { _confirmDelete = pid; renderCatalogoVendedor(); });
     if (action === 'toggle') el.addEventListener('click', async () => {
       const p = _productos.find(x => x.id === pid);
       if (!p) return;
@@ -106,7 +104,6 @@ function renderCatalogoVendedor() {
   });
 
   if (_modal)         initModalEvents();
-  if (_confirmDelete) initDeleteEvents();
   if (_tallasModal)   initTallasManagerEvents();
   if (_stockModal)    initStockModalEvents();
 }
@@ -133,7 +130,6 @@ function vendorCard(p) {
           </button>
           <button class="action-btn" data-action="stock"  data-pid="${p.id}" title="Gestionar stock">${Icons.Package(16)}</button>
           <button class="action-btn" data-action="edit"   data-pid="${p.id}" title="Editar">${Icons.Pencil(16)}</button>
-          <button class="action-btn" data-action="delete" data-pid="${p.id}" title="Eliminar">${Icons.Trash2(16)}</button>
         </div>
       </div>
     </div>`;
@@ -267,23 +263,6 @@ function productModal() {
             <button class="btn btn-primary" style="flex:1;" id="save-prod">
               ${isEdit ? 'Guardar cambios' : 'Agregar producto'}
             </button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-// ─── Modal de confirmación de eliminación ─────────────────────
-function deleteModal() {
-  return `
-    <div class="modal-overlay" id="del-modal">
-      <div class="modal-box modal-small">
-        <div class="modal-body">
-          <h3 style="font-family:var(--font-serif);font-size:20px;margin-bottom:8px;">¿Eliminar producto?</h3>
-          <p style="font-size:13px;color:var(--muted-fg);margin-bottom:24px;">Esta acción no se puede deshacer.</p>
-          <div class="modal-footer">
-            <button class="btn btn-outline" style="flex:1;" id="cancel-del">Cancelar</button>
-            <button class="btn btn-danger"  style="flex:1;" id="confirm-del">Eliminar</button>
           </div>
         </div>
       </div>
@@ -466,27 +445,6 @@ function initModalEvents() {
     } catch (err) {
       showToast(err.message || 'Error al guardar el producto', 'error');
       if (saveBtn) saveBtn.disabled = false;
-    }
-  });
-}
-
-// ─── Eventos del modal de eliminación ────────────────────────
-function initDeleteEvents() {
-  const cancel = () => { _confirmDelete = null; renderCatalogoVendedor(); };
-  document.getElementById('cancel-del')?.addEventListener('click', cancel);
-  document.getElementById('del-modal')?.addEventListener('click', e => { if (e.target.id==='del-modal') cancel(); });
-  document.getElementById('confirm-del')?.addEventListener('click', async () => {
-    const delBtn = document.getElementById('confirm-del');
-    if (delBtn) delBtn.disabled = true;
-    try {
-      await Api.desactivarProducto(_confirmDelete);
-      showToast('Producto eliminado');
-      _confirmDelete = null; _modal = null;
-      await loadCatalogoVendedor();
-    } catch (err) {
-      showToast(err.message || 'Error al eliminar el producto', 'error');
-      _confirmDelete = null;
-      renderCatalogoVendedor();
     }
   });
 }
