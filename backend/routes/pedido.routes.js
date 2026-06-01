@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, iniciarPago, agregarComentario, getTopProductos } = require('../controllers/pedido.controller');
+const { crearPedido, getPedidos, getPedidoById, actualizarEstado, cancelarPedidoPropio, agregarComentario, getTopProductos, programarEntregaHandler } = require('../controllers/pedido.controller');
 
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
 const { validarCrearPedido, validarActualizarEstado, validarComentario } = require('../middlewares/pedido.middleware');
@@ -57,18 +57,18 @@ router.patch( '/:id/estado', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), 
 router.patch( '/:id/cancelar', verificarToken, verificarRol('CLIENTE'), cancelarPedidoPropio );
 
 
-// PATCH /api/pedidos/:id/pagar
-// Avanza el estado del pedido de 'pendiente' a 'esperando_pago'.
-// Se llama desde pago.js cuando el cliente registra su intención de pago.
-// No requiere body — el id_usuario se obtiene del token JWT.
-router.patch( '/:id/pagar', verificarToken, verificarRol('CLIENTE'), iniciarPago );
-
-
 // PATCH /api/pedidos/:id/comentario
 // Agrega o edita el comentario interno del vendedor en un pedido.
 // No modifica el estado — solo actualiza comentarios_vendedor.
 // Solo Vendedor y Admin tienen este permiso.
 router.patch( '/:id/comentario', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), validarComentario, agregarComentario );
+
+
+// PATCH /api/pedidos/:id/programar-entrega
+// Asigna fecha y hora de entrega a un pedido en 'pendiente_programacion'.
+// Avanza automáticamente el estado a 'esperando_dia_entrega'.
+// Solo Vendedor y Admin tienen este permiso.
+router.patch( '/:id/programar-entrega', verificarToken, verificarRol('VENDEDOR', 'ADMIN'), programarEntregaHandler );
 
 
 module.exports = router;

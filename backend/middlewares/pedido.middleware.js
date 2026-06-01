@@ -6,17 +6,19 @@
 // ─────────────────────────────────────────────────────────────
 
 // Estados permitidos según el ENUM definido en la base de datos
-const ESTADOS_VALIDOS = ['pendiente', 'esperando_pago', 'pagado', 'entregado', 'cancelado'];
+const ESTADOS_VALIDOS = ['pendiente', 'pendiente_programacion', 'esperando_pago', 'esperando_dia_entrega', 'pagado', 'entregado', 'cancelado'];
 
 // Mapa de transiciones permitidas por estado actual.
-// Si necesitas habilitar una transición adicional (ej. pagado → esperando_pago),
-// solo agrégala al array correspondiente sin tocar el resto del middleware.
+// Nota: pendiente_programacion → esperando_dia_entrega se gestiona exclusivamente
+// a través de PATCH /:id/programar-entrega (requiere fecha_hora_entrega).
 const TRANSICIONES_VALIDAS = {
-  pendiente:      ['esperando_pago', 'cancelado'],
-  esperando_pago: ['pagado', 'cancelado'],
-  pagado:         ['entregado', 'cancelado'],
-  entregado:      [],
-  cancelado:      []
+  pendiente:              ['esperando_pago', 'cancelado'],
+  pendiente_programacion: ['cancelado'],
+  esperando_pago:         ['pagado', 'cancelado'],
+  esperando_dia_entrega:  ['entregado', 'cancelado'],
+  pagado:                 ['entregado', 'cancelado'],
+  entregado:              [],
+  cancelado:              []
 };
 
 
@@ -33,7 +35,7 @@ const TRANSICIONES_VALIDAS = {
  * Si falla, responde con 400 y un arreglo de errores.
  */
 const validarCrearPedido = (req, res, next) => {
-    const { total, id_direccion, comentarios } = req.body;
+    const { total, id_direccion, id_punto_entrega, tipo_entrega, comentarios } = req.body;
     const errores = [];
 
     // ── total ────────────────────────────────────────────────
@@ -46,13 +48,27 @@ const validarCrearPedido = (req, res, next) => {
         }
     }
 
-    // ── id_direccion ─────────────────────────────────────────
-    if (id_direccion === undefined || id_direccion === null || id_direccion === '') {
-        errores.push('El campo id_direccion es requerido.');
+    // ── tipo_entrega + validación condicional ────────────────
+    const tipoNorm = (tipo_entrega || 'envio').toString().trim();
+    if (!['envio', 'punto_entrega'].includes(tipoNorm)) {
+        errores.push("El tipo_entrega debe ser 'envio' o 'punto_entrega'.");
+    } else if (tipoNorm === 'punto_entrega') {
+        if (id_punto_entrega === undefined || id_punto_entrega === null || id_punto_entrega === '') {
+            errores.push('El campo id_punto_entrega es requerido cuando tipo_entrega es punto_entrega.');
+        } else {
+            const idNum = Number(id_punto_entrega);
+            if (!Number.isInteger(idNum) || idNum <= 0) {
+                errores.push('El id_punto_entrega debe ser un entero positivo.');
+            }
+        }
     } else {
-        const idNum = Number(id_direccion);
-        if (!Number.isInteger(idNum) || idNum <= 0) {
-            errores.push('El id_direccion debe ser un entero positivo.');
+        if (id_direccion === undefined || id_direccion === null || id_direccion === '') {
+            errores.push('El campo id_direccion es requerido cuando tipo_entrega es envio.');
+        } else {
+            const idNum = Number(id_direccion);
+            if (!Number.isInteger(idNum) || idNum <= 0) {
+                errores.push('El id_direccion debe ser un entero positivo.');
+            }
         }
     }
 
@@ -71,7 +87,14 @@ const validarCrearPedido = (req, res, next) => {
 
     // Normalizar antes de pasar al controller
     req.body.total        = Number(total);
-    req.body.id_direccion = Number(id_direccion);
+    req.body.tipo_entrega = tipoNorm;
+    if (tipoNorm === 'punto_entrega') {
+        req.body.id_punto_entrega = Number(id_punto_entrega);
+        req.body.id_direccion     = null;
+    } else {
+        req.body.id_direccion     = Number(id_direccion);
+        req.body.id_punto_entrega = null;
+    }
 
     next();
 };

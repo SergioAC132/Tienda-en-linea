@@ -10,6 +10,12 @@ function renderPedidos() {
   renderHeader();
 
   const root = document.getElementById('app-root');
+  const pagoCompletado = getParam('pago') === 'completado';
+  const pedidoIdParam  = getParam('pedidoId');
+
+  if (pagoCompletado) {
+    history.replaceState(null, '', window.location.pathname);
+  }
 
   // Mostrar estado de carga mientras se espera la respuesta de la API
   root.innerHTML = `
@@ -22,6 +28,23 @@ function renderPedidos() {
     .then(data => {
       AppState.setPedidos(data);
       renderPedidosList();
+      if (pagoCompletado) {
+        showToast('¡Pago procesado! Actualizando estado del pedido...');
+        if (pedidoIdParam) {
+          verificarYActualizarPago(Number(pedidoIdParam), data);
+        } else {
+          // Link generado antes del cambio — sin pedidoId en URL.
+          // Buscar el pedido en esperando_pago más reciente del usuario y verificar.
+          const candidato = data
+            .filter(p => p.estado === 'esperando_pago')
+            .sort((a, b) => new Date(b.fecha_pedido) - new Date(a.fecha_pedido))[0];
+          if (candidato) {
+            verificarYActualizarPago(Number(candidato.id_pedido), data);
+          } else {
+            esperarConfirmacion(data);
+          }
+        }
+      }
     })
     .catch(() => {
       // Si la API falla, intentar mostrar lo que haya en el estado local
@@ -73,6 +96,14 @@ function renderPedidosList() {
     });
   });
 
+  // Botón para pedidos en esperando_pago — navega a la página de pago
+  document.querySelectorAll('.btn-ir-pago').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      Nav.go(Nav.pago(btn.dataset.id));
+    });
+  });
+
   // Abrir detalle al hacer click en la tarjeta (excepto en los botones de acción)
   document.querySelectorAll('.order-card').forEach(card => {
     card.addEventListener('click', e => {
@@ -115,21 +146,41 @@ function renderTarjetaPedido(pedido) {
       <p class="form-hint">${pedido.comentarios_cliente}</p>
     </div>` : '';
 
-  // Botones de acción: solo disponibles cuando el pedido está en 'pendiente'.
-  // "Registrar pago" lleva al cliente a la página de pago (izquierda).
-  // "Cancelar pedido" permite anular el pedido (derecha).
-  const botonesAccionHtml = pedido.estado === 'pendiente' ? `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
-      <button class="btn btn-primary btn-sm btn-registrar-pago"
-              data-id="${idMostrar}">
-        Registrar pago
-      </button>
-      <button class="btn btn-outline btn-sm btn-cancelar-pedido"
-              data-id="${idMostrar}"
-              style="color:var(--destructive);border-color:var(--destructive);">
-        Cancelar pedido
-      </button>
-    </div>` : '';
+  // Botones de acción: disponibles según estado del pedido.
+  // 'pendiente': registrar pago y cancelar.
+  // 'pendiente_programacion': solo cancelar (pago en efectivo, esperando que el vendedor programe).
+  // 'esperando_pago': ir a ver el pago.
+  const botonesAccionHtml =
+    pedido.estado === 'pendiente' ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
+        <button class="btn btn-primary btn-sm btn-registrar-pago"
+                data-id="${idMostrar}">
+          Registrar pago
+        </button>
+        <button class="btn btn-outline btn-sm btn-cancelar-pedido"
+                data-id="${idMostrar}"
+                style="color:var(--destructive);border-color:var(--destructive);">
+          Cancelar pedido
+        </button>
+      </div>` :
+    pedido.estado === 'pendiente_programacion' ? `
+      <div style="margin-top:16px;">
+        <p style="font-size:12px;color:var(--muted-fg);margin-bottom:10px;">
+          Tu pago en efectivo fue registrado. El vendedor coordinará contigo la fecha de entrega.
+        </p>
+        <button class="btn btn-outline btn-sm btn-cancelar-pedido"
+                data-id="${idMostrar}"
+                style="color:var(--destructive);border-color:var(--destructive);">
+          Cancelar pedido
+        </button>
+      </div>` :
+    pedido.estado === 'esperando_pago' ? `
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary btn-sm btn-ir-pago"
+                data-id="${idMostrar}">
+          Ver pago
+        </button>
+      </div>` : '';
 
   return `
     <div class="order-card" data-id="${idMostrar}">
@@ -215,6 +266,18 @@ function abrirDetallePedidoCliente(pedido) {
       </div>`;
   };
 
+  // ── Punto de entrega ─────────────────────────────────────────
+  const buildPuntoEntregaHtml = punto => {
+    if (!punto || !punto.nombre) {
+      return `<p style="color:var(--muted-fg);font-size:13px;">No disponible</p>`;
+    }
+    return `
+      <div style="background:rgba(42,42,42,.4);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;">
+        <p style="font-weight:500;">${punto.nombre}</p>
+        ${punto.descripcion ? `<p style="color:var(--muted-fg);">${punto.descripcion}</p>` : ''}
+      </div>`;
+  };
+
   // ── Productos ────────────────────────────────────────────────
   const buildItemsHtml = items => {
     if (!items || items.length === 0) {
@@ -247,8 +310,10 @@ function abrirDetallePedidoCliente(pedido) {
     }).join('');
   };
 
-  const itemsIniciales = pedido.items || pedido.detalles || [];
-  const esPendiente    = pedido.estado === 'pendiente';
+  const itemsIniciales         = pedido.items || pedido.detalles || [];
+  const esPendiente            = pedido.estado === 'pendiente';
+  const esPendienteProgramacion = pedido.estado === 'pendiente_programacion';
+  const esEsperandoPago        = pedido.estado === 'esperando_pago';
 
   // ── Modal ────────────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -285,10 +350,10 @@ function abrirDetallePedidoCliente(pedido) {
           <div id="detalle-cli-items">${buildItemsHtml(itemsIniciales)}</div>
         </div>
 
-        <!-- Dirección -->
+        <!-- Entrega -->
         <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-          <p class="order-section-title">${Icons.MapPin(16)} Dirección de entrega</p>
-          <div id="detalle-cli-dir">${buildDireccionHtml(pedido.direccion)}</div>
+          <p class="order-section-title" id="detalle-cli-entrega-titulo">${Icons.MapPin(16)} Entrega</p>
+          <div id="detalle-cli-entrega"><p style="color:var(--muted-fg);font-size:13px;">Cargando...</p></div>
         </div>
 
         <!-- Comentarios -->
@@ -315,6 +380,15 @@ function abrirDetallePedidoCliente(pedido) {
                   style="color:var(--destructive);border-color:var(--destructive);">
             Cancelar pedido
           </button>` : ''}
+        ${esPendienteProgramacion ? `
+          <button class="btn btn-outline" id="btn-detalle-cli-cancelar"
+                  style="color:var(--destructive);border-color:var(--destructive);">
+            Cancelar pedido
+          </button>` : ''}
+        ${esEsperandoPago ? `
+          <button class="btn btn-primary" id="btn-detalle-cli-ver-pago">
+            Ver pago
+          </button>` : ''}
         <button class="btn btn-outline" id="btn-cerrar-detalle-cli" style="margin-left:auto;">
           Cerrar
         </button>
@@ -339,22 +413,127 @@ function abrirDetallePedidoCliente(pedido) {
     });
   }
 
-  // Cargar el detalle completo desde la API: productos y dirección
+  if (esPendienteProgramacion) {
+    document.getElementById('btn-detalle-cli-cancelar').addEventListener('click', () => {
+      cerrar();
+      cancelarPedido(idMostrar);
+    });
+  }
+
+  if (esEsperandoPago) {
+    document.getElementById('btn-detalle-cli-ver-pago').addEventListener('click', () => {
+      cerrar();
+      Nav.go(Nav.pago(idMostrar));
+    });
+  }
+
+  // Cargar el detalle completo desde la API: productos, entrega y fecha programada
   if (!isNaN(Number(idMostrar))) {
     Api.getPedidoById(Number(idMostrar))
       .then(data => {
         const items = data.items || data.detalles || data.detalle_pedidos || [];
-        if (items.length > 0) {
-          const container = document.getElementById('detalle-cli-items');
-          if (container) container.innerHTML = buildItemsHtml(items);
+        const itemsContainer = document.getElementById('detalle-cli-items');
+        if (itemsContainer && items.length > 0) {
+          itemsContainer.innerHTML = buildItemsHtml(items);
         }
-        if (data.direccion) {
-          const dirContainer = document.getElementById('detalle-cli-dir');
-          if (dirContainer) dirContainer.innerHTML = buildDireccionHtml(data.direccion);
+
+        const entregaContainer = document.getElementById('detalle-cli-entrega');
+        const entregaTitulo    = document.getElementById('detalle-cli-entrega-titulo');
+        if (entregaContainer) {
+          if (data.tipo_entrega === 'punto_entrega') {
+            if (entregaTitulo) entregaTitulo.innerHTML = `${Icons.MapPin(16)} Punto de entrega`;
+            entregaContainer.innerHTML = buildPuntoEntregaHtml(data.punto_entrega);
+          } else {
+            if (entregaTitulo) entregaTitulo.innerHTML = `${Icons.MapPin(16)} Dirección de entrega`;
+            entregaContainer.innerHTML = buildDireccionHtml(data.direccion);
+          }
+        }
+
+        if (data.fecha_hora_entrega) {
+          const fecha = new Date(data.fecha_hora_entrega);
+          const fechaFmt = fecha.toLocaleString('es-MX', {
+            weekday: 'long', year: 'numeric', month: 'long',
+            day: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+          const entregaDiv = entregaContainer?.closest('div[style*="border-top"]');
+          if (entregaDiv && !entregaDiv.querySelector('#detalle-cli-fecha-entrega')) {
+            const fechaEl = document.createElement('div');
+            fechaEl.id = 'detalle-cli-fecha-entrega';
+            fechaEl.style.cssText = 'margin-top:10px;font-size:13px;';
+            fechaEl.innerHTML = `<span class="form-label">Fecha de entrega programada</span>
+              <p style="margin-top:4px;color:var(--primary);">${fechaFmt}</p>`;
+            entregaDiv.appendChild(fechaEl);
+          }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        const entregaContainer = document.getElementById('detalle-cli-entrega');
+        if (entregaContainer) {
+          entregaContainer.innerHTML = `<p style="color:var(--muted-fg);font-size:13px;">No disponible</p>`;
+        }
+      });
   }
+}
+
+
+/**
+ * Consulta activamente la API de Clip para verificar si el pago fue completado.
+ * Si el backend confirma el pago, refresca la lista y muestra notificación.
+ * Si falla o el pago aún no está listo, cae al polling como fallback.
+ *
+ * @param {number} idPedido         - ID del pedido recién pagado
+ * @param {Array}  pedidosAnteriores - Snapshot de pedidos al llegar a la página
+ */
+function verificarYActualizarPago(idPedido, pedidosAnteriores) {
+  Api.verificarPagoClip(idPedido)
+    .then(result => {
+      if (result.confirmado) {
+        return Api.getPedidos().then(data => {
+          AppState.setPedidos(data);
+          renderPedidosList();
+          showToast('¡Pago confirmado! Tu pedido ha sido actualizado.', 'success');
+        });
+      }
+      esperarConfirmacion(pedidosAnteriores);
+    })
+    .catch(() => esperarConfirmacion(pedidosAnteriores));
+}
+
+
+/**
+ * Hace polling a la API cada 2 segundos (máximo 5 veces) hasta detectar
+ * que algún pedido que estaba en 'esperando_pago' pasó a 'pagado'.
+ * Cuando lo detecta, actualiza la lista y muestra una notificación.
+ * Se activa solo cuando Clip redirige con ?pago=completado.
+ *
+ * @param {Array} pedidosAnteriores - Snapshot de pedidos cargados al llegar a la página
+ */
+function esperarConfirmacion(pedidosAnteriores) {
+  let intentos = 0;
+  const MAX_INTENTOS = 5;
+
+  const intervalo = setInterval(() => {
+    intentos++;
+    Api.getPedidos()
+      .then(data => {
+        const hayNuevoPagado = data.some(nuevo =>
+          nuevo.estado === 'pagado' &&
+          pedidosAnteriores.some(
+            ant => String(ant.id_pedido) === String(nuevo.id_pedido) && ant.estado !== 'pagado'
+          )
+        );
+
+        if (hayNuevoPagado) {
+          clearInterval(intervalo);
+          AppState.setPedidos(data);
+          renderPedidosList();
+          showToast('¡Pago confirmado! Tu pedido ha sido actualizado.');
+        } else if (intentos >= MAX_INTENTOS) {
+          clearInterval(intervalo);
+        }
+      })
+      .catch(() => clearInterval(intervalo));
+  }, 2000);
 }
 
 

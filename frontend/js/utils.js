@@ -25,8 +25,26 @@ function formatDateDayMonth(iso) {
 
 // ─── Badges ──────────────────────────────────────────────────
 function getStatusBadge(estado) {
-  const cls = { entregado:'badge-green', pagado:'badge-gold', esperando_pago:'badge-yellow', cancelado:'badge-red', pendiente:'badge-gray', enviado:'badge-blue' };
-  const lbl = { esperando_pago:'Esperando pago', pendiente:'Pendiente', pagado:'Pagado', enviado:'Enviado', entregado:'Entregado', cancelado:'Cancelado' };
+  const cls = {
+    entregado:              'badge-green',
+    pagado:                 'badge-gold',
+    esperando_pago:         'badge-yellow',
+    esperando_dia_entrega:  'badge-blue',
+    cancelado:              'badge-red',
+    pendiente:              'badge-gray',
+    pendiente_programacion: 'badge-gray',
+    enviado:                'badge-blue',
+  };
+  const lbl = {
+    esperando_pago:         'Esperando pago',
+    pendiente:              'Pendiente',
+    pendiente_programacion: 'Pendiente de programación',
+    esperando_dia_entrega:  'Esperando día de entrega',
+    pagado:                 'Pagado',
+    enviado:                'Enviado',
+    entregado:              'Entregado',
+    cancelado:              'Cancelado',
+  };
   return `<span class="badge ${cls[estado]||'badge-gray'}">${lbl[estado]||estado}</span>`;
 }
 

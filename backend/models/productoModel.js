@@ -61,7 +61,7 @@ const getProductoById = async (id) => {
     FROM tallas t
     INNER JOIN productos_tallas pt ON pt.id_talla = t.id_talla
     WHERE pt.id_producto = $1
-    ORDER BY t.nombre ASC
+    ORDER BY t.orden ASC NULLS LAST, t.nombre ASC
   `, [id]);
 
   return { ...productoRows[0], imagenes, tallas };
@@ -150,20 +150,39 @@ const deleteImagen = async (id_imagen, id_producto) => {
 
 // TALLAS DEL PRODUCTO 
 
-// Asignar tallas a un producto (reemplaza las existentes)
-const setTallasProducto = async (id_producto, ids_tallas) => {
-  // Eliminar relaciones anteriores
+// Asignar tallas a un producto (reemplaza las existentes), con stock opcional
+// tallas: [{ id_talla, stock }] o [id_talla, ...]
+const setTallasProducto = async (id_producto, tallas) => {
   await pool.query('DELETE FROM productos_tallas WHERE id_producto = $1', [id_producto]);
 
-  if (!ids_tallas || ids_tallas.length === 0) return [];
+  if (!tallas || tallas.length === 0) return [];
 
-  // Insertar las nuevas
-  const values = ids_tallas.map((_, i) => `($1, $${i + 2})`).join(', ');
+  const normalized = tallas.map(t =>
+    typeof t === 'object' && t !== null ? t : { id_talla: t, stock: null }
+  );
+
+  const valueClauses = [];
+  const params = [id_producto];
+  normalized.forEach((t, i) => {
+    const base = 2 + i * 2;
+    valueClauses.push(`($1, $${base}, $${base + 1})`);
+    params.push(t.id_talla, t.stock ?? null);
+  });
+
   const { rows } = await pool.query(
-    `INSERT INTO productos_tallas (id_producto, id_talla) VALUES ${values} RETURNING *`,
-    [id_producto, ...ids_tallas]
+    `INSERT INTO productos_tallas (id_producto, id_talla, stock) VALUES ${valueClauses.join(', ')} RETURNING *`,
+    params
   );
   return rows;
+};
+
+// Actualizar stock de una talla específica de un producto
+const updateStockTalla = async (id_producto, id_talla, stock) => {
+  const { rows } = await pool.query(
+    `UPDATE productos_tallas SET stock = $1 WHERE id_producto = $2 AND id_talla = $3 RETURNING *`,
+    [stock, id_producto, id_talla]
+  );
+  return rows[0] || null;
 };
 
 // Detalle completo de un producto para el panel admin/vendedor (sin filtro activo)
@@ -180,11 +199,11 @@ const getProductoAdminById = async (id) => {
   );
 
   const { rows: tallas } = await pool.query(`
-    SELECT t.id_talla, t.nombre
+    SELECT t.id_talla, t.nombre, pt.stock
     FROM tallas t
     INNER JOIN productos_tallas pt ON pt.id_talla = t.id_talla
     WHERE pt.id_producto = $1
-    ORDER BY t.nombre ASC
+    ORDER BY t.orden ASC NULLS LAST, t.nombre ASC
   `, [id]);
 
   return { ...productoRows[0], imagenes, tallas };
@@ -198,6 +217,7 @@ module.exports = {
   createProducto,
   updateProducto,
   desactivarProducto,
+  updateStockTalla,
   addImagen,
   deleteImagen,
   setTallasProducto,
