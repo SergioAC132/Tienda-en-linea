@@ -72,13 +72,7 @@ function renderDashboardContent() {
     )
     .reduce((suma, p) => suma + Number(p.total), 0);
 
-  /**
-   * Pedidos entregados este mes.
-   */
-  const pedidosEntregados = pedidos.filter(p =>
-    p.estado === 'entregado' &&
-    new Date(p.fecha_pedido ?? p.fecha_creacion) >= primerDiaMes
-  ).length;
+  const pedidosEntregados = pedidos.filter(p => p.estado === 'entregado').length;
 
   // ── Pedidos en espera de pago (antes "Pagos pendientes") ────
   // La información de pagos pertenece a otro módulo.
